@@ -23,15 +23,13 @@ using namespace reindexer;
 class PocketDB {
 private:
     Reindexer* db;
-    sqlite3 *db3;
+    sqlite3 *db;
     
     int cur_version = 2;
 
     void CloseNamespaces();
-    void CloseDB();
     bool UpdateDB();
     bool ConnectDB();
-    bool ConnectDB3();
 
 public:
 	PocketDB();
@@ -41,7 +39,6 @@ public:
 
     bool Init();
 	bool InitDB(std::string table = "ALL");
-	bool InitDB3(std::string table = "ALL");
 	bool DropTable(std::string table);
 
 	bool CheckIndexes(UniValue& obj);
