@@ -21,6 +21,7 @@ PocketDB::PocketDB()
 PocketDB::~PocketDB()
 {
     CloseNamespaces();
+    CloseDB();
 }
 
 void PocketDB::CloseNamespaces() {
@@ -44,6 +45,10 @@ void PocketDB::CloseNamespaces() {
     db->CloseNamespace("Addresses");
     db->CloseNamespace("Comments");
     db->CloseNamespace("Comment");
+}
+
+void PocketDB::CloseDB() {
+    sqlite3_close(db3);
 }
 
 // Check for update DB
@@ -83,6 +88,16 @@ bool PocketDB::ConnectDB() {
 
     return InitDB();
 }
+
+bool PocketDB::ConnectDB3() {
+    if (sqlite3_open((GetDataDir() / "pocketdb" / "general.sqlite3").string().c_str(), &db3)) {
+        LogPrintf("Cannot open Sqlite DB (%s) - %s\n", (GetDataDir() / "pocketdb" / "general.sqlite3").string(), sqlite3_errmsg(db3));
+        sqlite3_close(db3);
+        return false;
+    }
+
+    return InitDB3();
+}
 //-----------------------------------------------------
 
 //-----------------------------------------------------
@@ -94,6 +109,7 @@ bool findInVector(std::vector<reindexer::NamespaceDef> defs, std::string name)
 bool PocketDB::Init()
 {
     if (!ConnectDB()) return false;
+    if (!ConnectDB3()) return false;
     if (!UpdateDB()) return false;
     
     LogPrintf("Loaded Reindexer DB (%s)\n", (GetDataDir() / "pocketdb").string());
@@ -396,6 +412,520 @@ bool PocketDB::InitDB(std::string table)
         db->AddIndex("CommentScores", {"address", "hash", "string", IndexOpts()});
         db->AddIndex("CommentScores", {"value", "-", "int", IndexOpts()});
         db->Commit("CommentScores");
+    }
+
+    return true;
+}
+
+bool PocketDB::InitDB3(std::string table)
+{
+    // Service
+    if (table == "Service" || table == "ALL") {
+        sqlite3_exec(db3, "create table Service ("
+                          "Service int primary key not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        //        db->OpenNamespace("Service", StorageOpts().Enabled().CreateIfMissing());
+        //        db->AddIndex("Service", {"version", "tree", "int", IndexOpts().PK()});
+        //        db->Commit("Service");
+    }
+
+    // RI Mempool
+    if (table == "Mempool" || table == "ALL") {
+        sqlite3_exec(db3, "create table Mempool ("
+                          "txid text primary key not null,"
+                          "txid_source text,"
+                          "table text not null,"
+                          "data blob not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        //        db->OpenNamespace("Mempool", StorageOpts().Enabled().CreateIfMissing());
+        //        db->AddIndex("Mempool", {"txid", "hash", "string", IndexOpts().PK()});
+        //        db->AddIndex("Mempool", {"txid_source", "hash", "string", IndexOpts()});
+        //        db->AddIndex("Mempool", {"table", "-", "string", IndexOpts()});
+        //        db->AddIndex("Mempool", {"data", "-", "string", IndexOpts()});
+        //        db->Commit("Mempool");
+    }
+
+    // Users
+    if (table == "UsersView" || table == "ALL") {
+        sqlite3_exec(db3, "create table UsersView ("
+                          "address text primary key not null,"
+                          "id int,"
+                          "txid text not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "name text not null,"
+                          "birthday int,"
+                          "gender int,"
+                          "regdate int not null,"
+                          "avatar text,"
+                          "about text,"
+                          "lang text,"
+                          "url text,"
+                          "pubkey text,"
+                          "donations text,"
+                          "referrer text,"
+                          "reputation int"
+                          ");",
+            NULL, NULL, NULL);
+
+        //        db->OpenNamespace("UsersView", StorageOpts().Enabled().CreateIfMissing());
+        //        db->AddIndex("UsersView", {"txid", "hash", "string", IndexOpts()});
+        //        db->AddIndex("UsersView", {"block", "tree", "int", IndexOpts()});
+        //        db->AddIndex("UsersView", {"time", "tree", "int64", IndexOpts()});
+        //        db->AddIndex("UsersView", {"address", "hash", "string", IndexOpts().PK()});
+        //        db->AddIndex("UsersView", {"name", "hash", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        //        db->AddIndex("UsersView", {"birthday", "-", "int", IndexOpts()});
+        //        db->AddIndex("UsersView", {"gender", "-", "int", IndexOpts()});
+        //        db->AddIndex("UsersView", {"regdate", "-", "int64", IndexOpts()});
+        //        db->AddIndex("UsersView", {"avatar", "-", "string", IndexOpts()});
+        //        db->AddIndex("UsersView", {"about", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        //        db->AddIndex("UsersView", {"lang", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        //        db->AddIndex("UsersView", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        //        db->AddIndex("UsersView", {"pubkey", "-", "string", IndexOpts()});
+        //        db->AddIndex("UsersView", {"donations", "-", "string", IndexOpts()});
+        //        db->AddIndex("UsersView", {"referrer", "hash", "string", IndexOpts()});
+        //        db->AddIndex("UsersView", {"id", "-", "int", IndexOpts()});
+        //        db->AddIndex("UsersView", {"reputation", "-", "int", IndexOpts()});
+        //        db->AddIndex("UsersView", {"name_text", {"name"}, "text", "composite", IndexOpts().SetCollateMode(CollateUTF8) });
+        //        db->Commit("UsersView");
+    }
+
+    // RI UsersHistory
+    if (table == "Users" || table == "ALL") {
+        sqlite3_exec(db3, "create table Users ("
+                          "address text primary key not null,"
+                          "id int,"
+                          "txid text not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "name text not null,"
+                          "birthday int,"
+                          "gender int,"
+                          "regdate int not null,"
+                          "avatar text,"
+                          "about text,"
+                          "lang text,"
+                          "url text,"
+                          "pubkey text,"
+                          "donations text,"
+                          "referrer text"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Users", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Users", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Users", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Users", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("Users", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("Users", {"name", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Users", {"birthday", "-", "int", IndexOpts()});
+        // db->AddIndex("Users", {"gender", "-", "int", IndexOpts()});
+        // db->AddIndex("Users", {"regdate", "-", "int64", IndexOpts()});
+        // db->AddIndex("Users", {"avatar", "-", "string", IndexOpts()});
+        // db->AddIndex("Users", {"about", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Users", {"lang", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Users", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Users", {"pubkey", "-", "string", IndexOpts()});
+        // db->AddIndex("Users", {"donations", "-", "string", IndexOpts()});
+        // db->AddIndex("Users", {"referrer", "-", "string", IndexOpts()});
+        // db->AddIndex("Users", {"id", "-", "int", IndexOpts()});
+        // db->Commit("Users");
+    }
+
+    // UserRatings
+    if (table == "UserRatings" || table == "ALL") {
+        sqlite3_exec(db3, "create table UserRatings ("
+                          "block int not null,"
+                          "address text not null,"
+                          "reputation int not null,"
+                          "primary key (address, block)"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("UserRatings", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("UserRatings", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("UserRatings", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("UserRatings", {"reputation", "-", "int", IndexOpts()});
+        // db->AddIndex("UserRatings", {"address+block", {"address", "block"}, "hash", "composite", IndexOpts().PK()});
+        // db->Commit("UserRatings");
+    }
+
+    // Posts
+    if (table == "Posts" || table == "ALL") {
+        sqlite3_exec(db3, "create table Posts ("
+                          "txid text primary key not null,"
+                          "txidEdit text,"
+                          "txidRepost text,"
+                          "block int not null,"
+                          "time int not null,"
+                          "address text not null,"
+                          "type int,"
+                          "lang text,"
+                          "caption text,"
+                          "caption_ text,"
+                          "message text,"
+                          "message_ text,"
+                          "tags text,"
+                          "url text,"
+                          "images text,"
+                          "settings text,"
+                          "scoreSum int,"
+                          "scoreCnt int,"
+                          "reputation int"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Posts", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Posts", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Posts", {"txidEdit", "hash", "string", IndexOpts()});
+        // db->AddIndex("Posts", {"txidRepost", "hash", "string", IndexOpts()});
+        // db->AddIndex("Posts", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Posts", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("Posts", {"address", "hash", "string", IndexOpts()});
+        // Types:
+        // 0 - simple post
+        // 1 - video post
+        // 2 - image post
+        // db->AddIndex("Posts", {"type", "tree", "int", IndexOpts()});
+        // db->AddIndex("Posts", {"lang", "-", "string", IndexOpts()});
+        // db->AddIndex("Posts", {"caption", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"caption_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"message", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"message_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"tags", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"images", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"settings", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Posts", {"scoreSum", "-", "int", IndexOpts()});
+        // db->AddIndex("Posts", {"scoreCnt", "-", "int", IndexOpts()});
+        // db->AddIndex("Posts", {"reputation", "-", "int", IndexOpts()});
+        // db->AddIndex("Posts", {"caption+message", {"caption_", "message_"}, "text", "composite", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->Commit("Posts");
+    }
+
+    // Posts Hitstory
+    if (table == "PostsHistory" || table == "ALL") {
+        sqlite3_exec(db3, "create table PostsHistory ("
+                          "txid text not null,"
+                          "txidEdit text,"
+                          "txidRepost text,"
+                          "block int not null,"
+                          "time int not null,"
+                          "address text not null,"
+                          "type int,"
+                          "lang text,"
+                          "caption text,"
+                          "message text,"
+                          "tags text,"
+                          "url text,"
+                          "images text,"
+                          "settings text,"
+                          "primary key (txid, block)"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("PostsHistory", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("PostsHistory", {"txid", "hash", "string", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"txidEdit", "hash", "string", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"txidRepost", "hash", "string", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"type", "-", "int", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"lang", "-", "string", IndexOpts()});
+        // db->AddIndex("PostsHistory", {"caption", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("PostsHistory", {"message", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("PostsHistory", {"tags", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("PostsHistory", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("PostsHistory", {"images", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("PostsHistory", {"settings", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("PostsHistory", {"txid+block", {"txid", "block"}, "hash", "composite", IndexOpts().PK()});
+        // db->Commit("PostsHistory");
+    }
+
+    // PostRatings
+    if (table == "PostRatings" || table == "ALL") {
+        sqlite3_exec(db3, "create table PostRatings ("
+                          "block int not null,"
+                          "posttxid text not null,"
+                          "scoreSum text not null,"
+                          "scoreCnt int not null,"
+                          "reputation int not null,"
+                          "primary key (posttxid, block)"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("PostRatings", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("PostRatings", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("PostRatings", {"posttxid", "hash", "string", IndexOpts()});
+        // db->AddIndex("PostRatings", {"scoreSum", "-", "int", IndexOpts()});
+        // db->AddIndex("PostRatings", {"scoreCnt", "-", "int", IndexOpts()});
+        // db->AddIndex("PostRatings", {"reputation", "-", "int", IndexOpts()});
+        // db->AddIndex("PostRatings", {"posttxid+block", {"posttxid", "block"}, "hash", "composite", IndexOpts().PK()});
+        // db->Commit("PostRatings");
+    }
+
+    // Scores
+    if (table == "Scores" || table == "ALL") {
+        sqlite3_exec(db3, "create table Scores ("
+                          "txid text primary key not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "posttxid text not null,"
+                          "address text not null,"
+                          "value int not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Scores", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Scores", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Scores", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Scores", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("Scores", {"posttxid", "hash", "string", IndexOpts()});
+        // db->AddIndex("Scores", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("Scores", {"value", "-", "int", IndexOpts()});
+        // db->Commit("Scores");
+    }
+
+    // Subscribes
+    if (table == "SubscribesView" || table == "ALL") {
+        sqlite3_exec(db3, "create table SubscribesView ("
+                          "txid text not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "address text not null,"
+                          "address_to text not null,"
+                          "private int not null,"
+                          "primary key (address, address_to)"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("SubscribesView", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("SubscribesView", {"txid", "hash", "string", IndexOpts()});
+        // db->AddIndex("SubscribesView", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("SubscribesView", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("SubscribesView", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("SubscribesView", {"address_to", "hash", "string", IndexOpts()});
+        // db->AddIndex("SubscribesView", {"private", "-", "bool", IndexOpts()});
+        // db->AddIndex("SubscribesView", {"address+address_to", {"address", "address_to"}, "hash", "composite", IndexOpts().PK()});
+        // db->Commit("SubscribesView");
+    }
+
+    // RI SubscribesHistory
+    if (table == "Subscribes" || table == "ALL") {
+        sqlite3_exec(db3, "create table Subscribes ("
+                          "txid text primary key not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "address text not null,"
+                          "address_to text not null,"
+                          "private int not null,"
+                          "unsubscribe int not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Subscribes", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Subscribes", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Subscribes", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Subscribes", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("Subscribes", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("Subscribes", {"address_to", "hash", "string", IndexOpts()});
+        // db->AddIndex("Subscribes", {"private", "-", "bool", IndexOpts()});
+        // db->AddIndex("Subscribes", {"unsubscribe", "-", "bool", IndexOpts()});
+        // db->Commit("Subscribes");
+    }
+
+    // Blocking
+    if (table == "BlockingView" || table == "ALL") {
+        sqlite3_exec(db3, "create table BlockingView ("
+                          "txid text primary key not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "address text not null,"
+                          "address_to text not null,"
+                          "address_reputation int not null"
+                          ");",
+            NULL, NULL, NULL);
+        // db->OpenNamespace("BlockingView", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("BlockingView", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("BlockingView", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("BlockingView", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("BlockingView", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("BlockingView", {"address_to", "hash", "string", IndexOpts()});
+        // db->AddIndex("BlockingView", {"address_reputation", "-", "int", IndexOpts()});
+        // db->Commit("BlockingView");
+    }
+
+    // BlockingHistory
+    if (table == "Blocking" || table == "ALL") {
+        sqlite3_exec(db3, "create table Blocking ("
+                          "txid text primary key not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "address text not null,"
+                          "address_to text not null,"
+                          "unblocking int not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Blocking", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Blocking", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Blocking", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Blocking", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("Blocking", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("Blocking", {"address_to", "hash", "string", IndexOpts()});
+        // db->AddIndex("Blocking", {"unblocking", "-", "bool", IndexOpts()});
+        // db->Commit("Blocking");
+    }
+
+    // Complains
+    if (table == "Complains" || table == "ALL") {
+        sqlite3_exec(db3, "create table Complains ("
+                          "txid text primary key not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "posttxid text not null,"
+                          "address text not null,"
+                          "reason int not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Complains", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Complains", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Complains", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Complains", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("Complains", {"posttxid", "hash", "string", IndexOpts()});
+        // db->AddIndex("Complains", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("Complains", {"reason", "-", "int", IndexOpts()});
+        // db->Commit("Complains");
+    }
+
+    // UTXO
+    if (table == "UTXO" || table == "ALL") {
+        sqlite3_exec(db3, "create table Utxo ("
+                          "txid text not null,"
+                          "txout int not null,"
+                          "time int not null,"
+                          "block text not null,"
+                          "address text not null,"
+                          "amount int not null,"
+                          "spent_block int,"
+                          "primary key (txid, txout)"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("UTXO", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("UTXO", {"txid", "-", "string", IndexOpts()});
+        // db->AddIndex("UTXO", {"txout", "-", "int", IndexOpts()});
+        // db->AddIndex("UTXO", {"time", "-", "int64", IndexOpts()});
+        // db->AddIndex("UTXO", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("UTXO", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("UTXO", {"amount", "-", "int64", IndexOpts()});
+        // db->AddIndex("UTXO", {"spent_block", "tree", "int", IndexOpts()});
+        // db->AddIndex("UTXO", {"txid+txout", {"txid", "txout"}, "hash", "composite", IndexOpts().PK()});
+        // db->Commit("UTXO");
+    }
+
+    // Addresses
+    if (table == "Addresses" || table == "ALL") {
+        sqlite3_exec(db3, "create table Addresses ("
+                          "address text primary key not null,"
+                          "txid text not null,"
+                          "block text not null,"
+                          "time int not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Addresses", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Addresses", {"txid", "hash", "string", IndexOpts()});
+        // db->AddIndex("Addresses", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Addresses", {"address", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Addresses", {"time", "tree", "int64", IndexOpts()});
+        // db->Commit("Addresses");
+    }
+
+    // Comment
+    if (table == "Comment" || table == "ALL") {
+        sqlite3_exec(db3, "create table Comment ("
+                          "txid text primary key not null,"
+                          "otxid text not null,"
+                          "last int not null,"
+                          "postid text not null,"
+                          "address text not null,"
+                          "time int not null,"
+                          "block int not null,"
+                          "msg text not null,"
+                          "parentid text"
+                          "answerid text"
+                          "scoreUp int"
+                          "scoreDown int"
+                          "reputation int"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("Comment", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("Comment", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("Comment", {"otxid", "hash", "string", IndexOpts()});
+        // db->AddIndex("Comment", {"last", "-", "bool", IndexOpts()});
+        // db->AddIndex("Comment", {"postid", "hash", "string", IndexOpts()});
+        // db->AddIndex("Comment", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("Comment", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("Comment", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("Comment", {"msg", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        // db->AddIndex("Comment", {"parentid", "hash", "string", IndexOpts()});
+        // db->AddIndex("Comment", {"answerid", "hash", "string", IndexOpts()});
+        // db->AddIndex("Comment", {"scoreUp", "-", "int", IndexOpts()});
+        // db->AddIndex("Comment", {"scoreDown", "-", "int", IndexOpts()});
+        // db->AddIndex("Comment", {"reputation", "-", "int", IndexOpts()});
+        // db->Commit("Comment");
+    }
+
+    // CommentRatings
+    if (table == "CommentRatings" || table == "ALL") {
+        sqlite3_exec(db3, "create table CommentRatings ("
+                          "block int not null,"
+                          "commentid text not null,"
+                          "scoreUp text not null,"
+                          "scoreDown int not null,"
+                          "reputation int not null,"
+                          "primary key (commentid, block)"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("CommentRatings", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("CommentRatings", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("CommentRatings", {"commentid", "hash", "string", IndexOpts()});
+        // db->AddIndex("CommentRatings", {"scoreUp", "-", "int", IndexOpts()});
+        // db->AddIndex("CommentRatings", {"scoreDown", "-", "int", IndexOpts()});
+        // db->AddIndex("CommentRatings", {"reputation", "-", "int", IndexOpts()});
+        // db->AddIndex("CommentRatings", {"commentid+block", {"commentid", "block"}, "hash", "composite", IndexOpts().PK()});
+        // db->Commit("CommentRatings");
+    }
+
+    // CommentScores
+    if (table == "CommentScores" || table == "ALL") {
+        sqlite3_exec(db3, "create table CommentScores ("
+                          "txid text primary key not null,"
+                          "block int not null,"
+                          "time int not null,"
+                          "commentid text not null,"
+                          "address text not null,"
+                          "value int not null"
+                          ");",
+            NULL, NULL, NULL);
+
+        // db->OpenNamespace("CommentScores", StorageOpts().Enabled().CreateIfMissing());
+        // db->AddIndex("CommentScores", {"txid", "hash", "string", IndexOpts().PK()});
+        // db->AddIndex("CommentScores", {"block", "tree", "int", IndexOpts()});
+        // db->AddIndex("CommentScores", {"time", "tree", "int64", IndexOpts()});
+        // db->AddIndex("CommentScores", {"commentid", "hash", "string", IndexOpts()});
+        // db->AddIndex("CommentScores", {"address", "hash", "string", IndexOpts()});
+        // db->AddIndex("CommentScores", {"value", "-", "int", IndexOpts()});
+        // db->Commit("CommentScores");
     }
 
     return true;
