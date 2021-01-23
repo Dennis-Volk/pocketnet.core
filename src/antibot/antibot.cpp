@@ -1222,6 +1222,8 @@ void AntiBot::CheckTransactionRIItem(UniValue oitm, int height, ANTIBOTRESULT& r
 
 void AntiBot::CheckTransactionRIItem(UniValue oitm, BlockVTX& blockVtx, bool checkMempool, int height, ANTIBOTRESULT& resultCode) {
     resultCode = ANTIBOTRESULT::Success;
+    // TODO (brangr): DEBUG !!!!!!!!!!!!!!!!
+    return;
     std::string table = oitm["table"].get_str();
     std::string tx_type = oitm["type"].get_str();
     

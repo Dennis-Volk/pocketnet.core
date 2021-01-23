@@ -14,12 +14,14 @@ std::map<uint256, std::string> POCKETNET_DATA;
 //-----------------------------------------------------
 PocketDB::PocketDB()
 {
+    sqliteRepository = new SqliteRepository(db3);
     // reindexer::logInstallWriter([](int level, char* buf) {
     //     LogPrintf("=== %s\n", buf);
     // });
 }
 PocketDB::~PocketDB()
 {
+    delete sqliteRepository;
     CloseNamespaces();
     CloseDB();
 }
@@ -90,7 +92,7 @@ bool PocketDB::ConnectDB() {
 }
 
 bool PocketDB::ConnectDB3() {
-    if (sqlite3_open((GetDataDir() / "pocketdb" / "general.sqlite3").string().c_str(), &db3)) {
+    if (sqlite3_open((GetDataDir() / "pocketdb" / "main.sqlite3").string().c_str(), &db3)) {
         LogPrintf("Cannot open Sqlite DB (%s) - %s\n", (GetDataDir() / "pocketdb" / "general.sqlite3").string(), sqlite3_errmsg(db3));
         sqlite3_close(db3);
         return false;
@@ -419,12 +421,14 @@ bool PocketDB::InitDB(std::string table)
 
 bool PocketDB::InitDB3(std::string table)
 {
+    char *zErrMsg = 0;
+
     // Service
     if (table == "Service" || table == "ALL") {
         sqlite3_exec(db3, "create table Service ("
                           "Service int primary key not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // RI Mempool
@@ -435,7 +439,7 @@ bool PocketDB::InitDB3(std::string table)
                           "table text not null,"
                           "data blob not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Users
@@ -459,7 +463,7 @@ bool PocketDB::InitDB3(std::string table)
                           "referrer text,"
                           "reputation int"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // RI UsersHistory
@@ -482,7 +486,7 @@ bool PocketDB::InitDB3(std::string table)
                           "donations text,"
                           "referrer text"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // UserRatings
@@ -493,7 +497,7 @@ bool PocketDB::InitDB3(std::string table)
                           "reputation int not null,"
                           "primary key (address, block)"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Posts
@@ -519,7 +523,7 @@ bool PocketDB::InitDB3(std::string table)
                           "scoreCnt int,"
                           "reputation int"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Posts Hitstory
@@ -541,7 +545,7 @@ bool PocketDB::InitDB3(std::string table)
                           "settings text,"
                           "primary key (txid, block)"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // PostRatings
@@ -554,7 +558,7 @@ bool PocketDB::InitDB3(std::string table)
                           "reputation int not null,"
                           "primary key (posttxid, block)"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Scores
@@ -567,7 +571,7 @@ bool PocketDB::InitDB3(std::string table)
                           "address text not null,"
                           "value int not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Subscribes
@@ -581,7 +585,7 @@ bool PocketDB::InitDB3(std::string table)
                           "private int not null,"
                           "primary key (address, address_to)"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // RI SubscribesHistory
@@ -595,7 +599,7 @@ bool PocketDB::InitDB3(std::string table)
                           "private int not null,"
                           "unsubscribe int not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Blocking
@@ -608,7 +612,7 @@ bool PocketDB::InitDB3(std::string table)
                           "address_to text not null,"
                           "address_reputation int not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // BlockingHistory
@@ -621,7 +625,7 @@ bool PocketDB::InitDB3(std::string table)
                           "address_to text not null,"
                           "unblocking int not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Complains
@@ -634,22 +638,22 @@ bool PocketDB::InitDB3(std::string table)
                           "address text not null,"
                           "reason int not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // UTXO
-    if (table == "UTXO" || table == "ALL") {
+    if (table == "Utxo" || table == "ALL") {
         sqlite3_exec(db3, "create table Utxo ("
                           "txid text not null,"
                           "txout int not null,"
                           "time int not null,"
-                          "block text not null,"
+                          "block int not null,"
                           "address text not null,"
                           "amount int not null,"
                           "spent_block int,"
                           "primary key (txid, txout)"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Addresses
@@ -660,7 +664,7 @@ bool PocketDB::InitDB3(std::string table)
                           "block text not null,"
                           "time int not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // Comment
@@ -680,7 +684,7 @@ bool PocketDB::InitDB3(std::string table)
                           "scoreDown int"
                           "reputation int"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // CommentRatings
@@ -693,7 +697,7 @@ bool PocketDB::InitDB3(std::string table)
                           "reputation int not null,"
                           "primary key (commentid, block)"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     // CommentScores
@@ -706,7 +710,7 @@ bool PocketDB::InitDB3(std::string table)
                           "address text not null,"
                           "value int not null"
                           ");",
-            NULL, NULL, NULL);
+            NULL, 0, &zErrMsg);
     }
 
     return true;
@@ -940,7 +944,22 @@ Error PocketDB::Upsert(std::string table, Item& item)
 Error PocketDB::UpsertWithCommit(std::string table, Item& item)
 {
     Error err = db->Upsert(table, item);
-    if (err.ok()) return db->Commit(table);
+    if (err.ok()) {
+        err = db->Commit(table);
+
+        // Write to sqlite
+        if (table == "UTXO")
+            sqliteRepository->Add({
+                item["txid"].As<string>(),
+                item["txout"].As<int>(),
+                item["time"].As<int64_t>(),
+                item["block"].As<int>(),
+                item["address"].As<string>(),
+                item["amount"].As<int64_t>(),
+                item["spent_block"].As<int>(),
+            });
+    }
+
     return err;
 }
 

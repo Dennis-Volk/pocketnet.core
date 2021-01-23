@@ -1,4 +1,4 @@
-// Copyright (c) 2018 PocketNet developers
+// Copyright (c) 2021 PocketNet developers
 // PocketDB general wrapper
 //-----------------------------------------------------
 #ifndef POCKETDB_H
@@ -14,7 +14,7 @@
 #include <crypto/sha256.h>
 #include <utilstrencodings.h>
 #include <uint256.h>
-#include <sqlite3.h>
+#include "sqlite.h"
 //-----------------------------------------------------
 using namespace reindexer;
 //-----------------------------------------------------
@@ -24,6 +24,7 @@ class PocketDB {
 private:
     Reindexer* db;
     sqlite3 *db3;
+    SqliteRepository *sqliteRepository;
     
     int cur_version = 2;
 
@@ -110,7 +111,6 @@ public:
 
     Error CommitLastItem(std::string table, Item& itm, int height);
     Error RestoreLastItem(std::string table, std::string txid, std::string otxid, int height);
-
 };
 //-----------------------------------------------------
 extern std::unique_ptr<PocketDB> g_pocketdb;
