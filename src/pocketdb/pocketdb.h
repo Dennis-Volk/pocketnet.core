@@ -14,6 +14,7 @@
 #include <crypto/sha256.h>
 #include <utilstrencodings.h>
 #include <uint256.h>
+#include <sqlite3.h>
 //-----------------------------------------------------
 using namespace reindexer;
 //-----------------------------------------------------
@@ -22,6 +23,7 @@ using namespace reindexer;
 class PocketDB {
 private:
     Reindexer* db;
+    sqlite3 *db;
     
     int cur_version = 2;
 
