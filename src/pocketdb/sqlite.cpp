@@ -9,9 +9,9 @@ SqliteRepository::SqliteRepository(sqlite3* sqLiteDb) {
 
 SqliteRepository::~SqliteRepository() {}
 //-----------------------------------------------------
-bool SqliteRepository::_exec(char* sql) {
+bool SqliteRepository::_exec(string sql) {
     char *zErrMsg = 0;
-    if (sqlite3_exec(db, sql, NULL, 0, &zErrMsg)) {
+    if (sqlite3_exec(db, sql.c_str(), 0, 0, &zErrMsg)) {
         // todo log
         sqlite3_free(zErrMsg);
         return false;
@@ -21,18 +21,16 @@ bool SqliteRepository::_exec(char* sql) {
 }
 //-----------------------------------------------------
 bool SqliteRepository::Add(Utxo utxo) {
-    char* sql;
-    
-    printf(sql,
-        "insert into Utxo (txid, txout, time, block, address, amount, spent_block) values ('%s', %d, %ld, '%d', '%s', %ld, %d);",
-        utxo.txid,
-        utxo.txout,
-        utxo.time,
-        utxo.block,
-        utxo.address,
-        utxo.amount,
-        utxo.spent_block
-    );
+    string sql = "insert into Utxo (txid, txout, time, block, address, amount, spent_block) \
+        values ( \
+            '" + utxo.txid + "', \
+            " + to_string(utxo.txout) + ", \
+            " + to_string(utxo.time) + ", \
+            " + to_string(utxo.block) + ", \
+            '" + utxo.address + "', \
+            " + to_string(utxo.amount) + ", \
+            " + to_string(utxo.spent_block) + " \
+        );";
 
     return _exec(sql);
 }
