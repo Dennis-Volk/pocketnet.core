@@ -35,7 +35,6 @@ LIBPOCKETCOIN_CRYPTO_BASE=crypto/libpocketcoin_crypto_base.a
 LIBPOCKETCOINQT=qt/libpocketcoinqt.a
 LIBSECP256K1=secp256k1/libsecp256k1.la
 LIBREINDEXER=libreindexer.a
-LIBSQLITE3=libsqlite3.a
 
 if ENABLE_ZMQ
 LIBPOCKETCOIN_ZMQ=libpocketcoin_zmq.a
@@ -68,7 +67,6 @@ $(LIBSECP256K1): $(wildcard secp256k1/src/*.h) $(wildcard secp256k1/src/*.c) $(w
 # But to build the less dependent modules first, we manually select their order here:
 EXTRA_LIBRARIES += \
   $(LIBREINDEXER) \
-  $(LIBSQLITE3) \
   $(LIBPOCKETCOIN_CRYPTO) \
   $(LIBPOCKETCOIN_UTIL) \
   $(LIBPOCKETCOIN_COMMON) \
@@ -836,14 +834,6 @@ libreindexer_a_SOURCES = \
     $(REINDEXER_H)
 #
 
-# reindexer library
-libsqlite3_a_CPPFLAGS = -DSQLITE_ENABLE_JSON1 -Isqlite3
-libsqlite3_a_CXXFLAGS = -g
-libsqlite3_a_SOURCES = \
-    sqlite3/sqlite3.c \
-    sqlite3/sqlite3.h
-#
-
 # pocketcoind binary #
 pocketcoind_SOURCES = pocketcoind.cpp $(REINDEXER_H) $(REINDEXER_CC)
 pocketcoind_CPPFLAGS = $(AM_CPPFLAGS) $(POCKETCOIN_INCLUDES)
@@ -856,7 +846,6 @@ endif
 
 pocketcoind_LDADD = \
   $(LIBREINDEXER) \
-  $(LIBSQLITE3) \
   $(LIBPOCKETCOIN_SERVER) \
   $(LIBPOCKETCOIN_WALLET) \
   $(LIBPOCKETCOIN_COMMON) \
@@ -870,7 +859,7 @@ pocketcoind_LDADD = \
   $(LIBMEMENV) \
   $(LIBSECP256K1)
 
-pocketcoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) -Lsqlite3
+pocketcoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS)
 
 # pocketcoin-cli binary #
 pocketcoin_cli_SOURCES = pocketcoin-cli.cpp
