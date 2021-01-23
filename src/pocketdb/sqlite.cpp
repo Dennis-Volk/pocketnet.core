@@ -21,16 +21,15 @@ bool SqliteRepository::_exec(string sql) {
 }
 //-----------------------------------------------------
 bool SqliteRepository::Add(Utxo utxo) {
-    string sql = "insert into Utxo (txid, txout, time, block, address, amount, spent_block) \
-        values ( \
-            '" + utxo.txid + "', \
-            " + to_string(utxo.txout) + ", \
-            " + to_string(utxo.time) + ", \
-            " + to_string(utxo.block) + ", \
-            '" + utxo.address + "', \
-            " + to_string(utxo.amount) + ", \
-            " + to_string(utxo.spent_block) + " \
-        );";
+    string sql = "insert into Utxo (txid, txout, time, block, address, amount, spent_block) values ( '" + \
+            utxo.txid + "'," + \
+        to_string(utxo.txout) + "," + \
+        to_string(utxo.time) + "," + \
+        to_string(utxo.block) + ",'" + \
+            utxo.address + "'," + \
+        to_string(utxo.amount) + "," + \
+        to_string(utxo.spent_block) + \
+        ");";
 
     return _exec(sql);
 }

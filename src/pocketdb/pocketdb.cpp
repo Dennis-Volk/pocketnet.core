@@ -14,7 +14,6 @@ std::map<uint256, std::string> POCKETNET_DATA;
 //-----------------------------------------------------
 PocketDB::PocketDB()
 {
-    sqliteRepository = new SqliteRepository(db3);
     // reindexer::logInstallWriter([](int level, char* buf) {
     //     LogPrintf("=== %s\n", buf);
     // });
@@ -97,7 +96,8 @@ bool PocketDB::ConnectDB3() {
         sqlite3_close(db3);
         return false;
     }
-
+    
+    sqliteRepository = new SqliteRepository(db3);
     return InitDB3();
 }
 //-----------------------------------------------------

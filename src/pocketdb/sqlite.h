@@ -63,7 +63,7 @@ struct Utxo {
 //-----------------------------------------------------
 class SqliteRepository {
 private:
-    sqlite3 *db;
+    sqlite3* db;
     bool _exec(string sql);
 
 public:
