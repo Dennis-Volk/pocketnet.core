@@ -1219,8 +1219,9 @@ static UniValue getstatistic(const JSONRPCRequest& request) {
             "getstatistic (start_time, end_time)\n"
             "\nGet statistics.\n"
             "\nArguments:\n"
-            "1. \"end_time\"   (int64, optional) End time of period\n"
-            "2. \"start_time\"   (int64, optional) Start time of period\n"
+            "1. \"start_time\"   (int64, optional) Start time of period\n"
+            "2. \"end_time\"     (int64, optional) End time of period\n"
+            "3. \"chunk\"        (int, optional) Chunk size\n"
         );
 
     int64_t end_time = GetAdjustedTime();
