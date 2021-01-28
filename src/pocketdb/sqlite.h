@@ -12,53 +12,211 @@ using namespace std;
 // Models
 
 struct UserView {
-    string address;
-    int id;
-    string txid;
-    int block;
-    int time;
-    string name;
-    int birthday;
-    int gender;
-    int regdate;
-    string avatar;
-    string about;
-    string lang;
-    string url;
-    string pubkey;
-    string donations;
-    string referrer;
-    int reputation;
+    string Address;
+    int Id;
+    string Txid;
+    int Block;
+    int Time;
+    string Name;
+    int Birthday;
+    int Gender;
+    int RegDate;
+    string Avatar;
+    string About;
+    string Lang;
+    string Url;
+    string Pubkey;
+    string Donations;
+    string Referrer;
+    int Reputation;
 };
 
 struct User {
-    string address;
-    int id;
-    string txid;
-    int block;
-    int time;
-    string name;
-    int birthday;
-    int gender;
-    int regdate;
-    string avatar;
-    string about;
-    string lang;
-    string url;
-    string pubkey;
-    string donations;
-    string referrer;
+    string Address;
+    int Id;
+    string Txid;
+    int Block;
+    int Time;
+    string Name;
+    int Birthday;
+    int Gender;
+    int RegDate;
+    string Avatar;
+    string About;
+    string Lang;
+    string Url;
+    string Pubkey;
+    string Donations;
+    string Referrer;
 };
 
 struct Utxo {
-    string txid;
-    int txout;
-    int64_t time;
-    int block;
-    string address;
-    int64_t amount;
-    int spent_block;
+    string Txid;
+    int Txout;
+    int64_t Time;
+    int Block;
+    string Address;
+    int64_t Amount;
+    int SpentBlock;
 };
+
+struct Mempool {
+    string Txid;
+    string TxidSource;
+    string Table;
+    string Data;
+};
+
+struct Service {
+    int Version;
+};
+
+struct UserRatings {
+    int Block;
+    string Address;
+    int Reputation;
+};
+
+struct Posts {
+    string Txid;
+    string TxidEdit;
+    string TxidRepost;
+    int Block;
+    int Time;
+    string Address;
+    int Type;
+    string Lang;
+    string Caption;
+    string Message;
+    string Tags;
+    string Url;
+    string Images;
+    string Settings;
+    int ScoreSum;
+    int ScoreCnt;
+    int Reputation;
+};
+
+struct PostsHistory {
+    string Txid;
+    string TxidEdit;
+    string TxidRepost;
+    int Block;
+    int Time;
+    string Address;
+    int Type;
+    string Lang;
+    string Caption;
+    string Message;
+    string Tags;
+    string Url;
+    string Images;
+    string Settings;
+};
+
+struct PostRatings {
+    int Block;
+    string PostTxid;
+    int ScoreSum;
+    int ScoreCnt;
+    int Reputation;
+};
+
+struct Scores {
+    string Txid;
+    int Block;
+    int Time;
+    string PostTxid;
+    string Address;
+    int Value;
+};
+
+struct SubscribesView {
+    string Txid;
+    int Block;
+    int Time;
+    string Address;
+    string AddressTo;
+    int Private;
+};
+
+struct Subscribes {
+    string Txid;
+    int Block;
+    int Time;
+    string Address;
+    string AddressTo;
+    int Private;
+    int Ubsubscribe;
+};
+
+struct BlockingView {
+    string Txid;
+    int Block;
+    int Time;
+    string Address;
+    string AddressTo;
+    int AddressReputation;
+};
+
+struct Blocking {
+    string Txid;
+    int Block;
+    int Time;
+    string Address;
+    string AddressTo;
+    int Unblocking;
+};
+
+struct Complains {
+    string Txid;
+    int Block;
+    int Time;
+    string PostTxid;
+    string Address;
+    int Reason;
+};
+
+struct Addresses {
+    string Txid;
+    int Block;
+    string Address;
+    int Time;
+};
+
+struct Comment {
+    string Txid;
+    string OldTxid;
+    int Last;
+    string PostTxid;
+    string Address;
+    int Time;
+    int Block;
+    string Msg;
+    string ParentId;
+    string AnswerId;
+    int ScoreUp;
+    int ScoreDown;
+    int Reputation;
+};
+
+struct CommentRatings {
+    int Block;
+    string CommentId;
+    int ScoreUpl;
+    int ScoreDown;
+    int Reputation;
+};
+
+struct CommentScores {
+    string Txid;
+    int Block;
+    int Time;
+    string CommentId;
+    string Address;
+    int Value;
+};
+
 
 //-----------------------------------------------------
 class SqliteRepository {
