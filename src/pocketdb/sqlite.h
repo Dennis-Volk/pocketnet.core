@@ -5,6 +5,7 @@
 #define SQLITE_H
 //-----------------------------------------------------
 #include <string>
+#include <regex>
 #include <sqlite3.h>
 
 using namespace std;
@@ -222,7 +223,10 @@ struct CommentScores {
 class SqliteRepository {
 private:
     sqlite3* db;
-    bool _exec(string sql);
+    bool exec(string sql);
+    string sql(string sql) {
+        return regex_replace(sql, regex("'"), "''");
+    }
 
 public:
     SqliteRepository(sqlite3* db);
