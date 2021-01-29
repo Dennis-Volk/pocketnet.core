@@ -12,36 +12,16 @@ using namespace std;
 //-----------------------------------------------------
 // Models
 
-struct UserView {
-    string Address;
-    int Id;
-    string Txid;
-    int Block;
-    int Time;
-    string Name;
-    int Birthday;
-    int Gender;
-    int RegDate;
-    string Avatar;
-    string About;
-    string Lang;
-    string Url;
-    string Pubkey;
-    string Donations;
-    string Referrer;
-    int Reputation;
-};
-
 struct User {
     string Address;
     int Id;
     string Txid;
     int Block;
-    int Time;
+    int64_t Time;
     string Name;
     int Birthday;
     int Gender;
-    int RegDate;
+    int64_t RegDate;
     string Avatar;
     string About;
     string Lang;
@@ -49,6 +29,7 @@ struct User {
     string Pubkey;
     string Donations;
     string Referrer;
+    // int Reputation;
 };
 
 struct Utxo {
@@ -78,12 +59,12 @@ struct UserRatings {
     int Reputation;
 };
 
-struct Posts {
+struct Post {
     string Txid;
     string TxidEdit;
     string TxidRepost;
     int Block;
-    int Time;
+    int64_t Time;
     string Address;
     int Type;
     string Lang;
@@ -98,7 +79,7 @@ struct Posts {
     int Reputation;
 };
 
-struct PostsHistory {
+struct PostHistory {
     string Txid;
     string TxidEdit;
     string TxidRepost;
@@ -115,7 +96,7 @@ struct PostsHistory {
     string Settings;
 };
 
-struct PostRatings {
+struct PostRating {
     int Block;
     string PostTxid;
     int ScoreSum;
@@ -123,7 +104,7 @@ struct PostRatings {
     int Reputation;
 };
 
-struct Scores {
+struct PostScore {
     string Txid;
     int Block;
     int Time;
@@ -132,7 +113,7 @@ struct Scores {
     int Value;
 };
 
-struct SubscribesView {
+struct SubscribeView {
     string Txid;
     int Block;
     int Time;
@@ -141,7 +122,7 @@ struct SubscribesView {
     int Private;
 };
 
-struct Subscribes {
+struct Subscribe {
     string Txid;
     int Block;
     int Time;
@@ -169,7 +150,7 @@ struct Blocking {
     int Unblocking;
 };
 
-struct Complains {
+struct Complain {
     string Txid;
     int Block;
     int Time;
@@ -178,7 +159,7 @@ struct Complains {
     int Reason;
 };
 
-struct Addresses {
+struct Address {
     string Txid;
     int Block;
     string Address;
@@ -201,7 +182,7 @@ struct Comment {
     int Reputation;
 };
 
-struct CommentRatings {
+struct CommentRating {
     int Block;
     string CommentId;
     int ScoreUpl;
@@ -209,7 +190,7 @@ struct CommentRatings {
     int Reputation;
 };
 
-struct CommentScores {
+struct CommentScore {
     string Txid;
     int Block;
     int Time;
@@ -232,7 +213,15 @@ public:
     SqliteRepository(sqlite3* db);
     ~SqliteRepository();
 
-    bool Add(Utxo utxo);
+    bool Add(Utxo itm);
+    bool Add(User itm);
+    bool Add(Post itm);
+    bool Add(PostScore itm);
+    bool Add(Subscribe itm);
+    bool Add(Blocking itm);
+    bool Add(Complain itm);
+    bool Add(Comment itm);
+    bool Add(CommentScore itm);
 };
 //-----------------------------------------------------
 #endif // SQLITE_H
