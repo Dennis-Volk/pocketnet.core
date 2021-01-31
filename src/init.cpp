@@ -55,6 +55,8 @@
 #include <antibot/antibot.h>
 #include <index/addrindex.h>
 #include <pocketdb/pocketdb.h>
+#include <pocketdb/pocketrepository.h>
+#include <pocketdb/benchmark.h>
 
 #ifndef WIN32
 #include <signal.h>
@@ -250,7 +252,9 @@ void Shutdown()
 
     // Stoping reindexer DB
     g_pocketdb->~PocketDB();
-    LogPrintf("Close reindexer DB\n");
+    g_pocket_repository->~PocketRepository();
+    g_benchmark->~Benchmark();
+    LogPrintf("Close pocket DB\n");
 
 #if ENABLE_ZMQ
     if (g_zmq_notification_interface) {
@@ -1373,10 +1377,18 @@ bool AppInitMain()
 
 	// ********************************************************* Step 4.1: Start PocketDB
     uiInterface.InitMessage(_("Loading Reindexer DB..."));
-	g_pocketdb = std::unique_ptr<PocketDB>(new PocketDB());
+	g_pocketdb = std::unique_ptr<PocketDB>();
     if (!g_pocketdb->Init()) {
         return InitError(_("Unable to start reindexer database."));
     }
+
+    uiInterface.InitMessage(_("Loading Sqlite Pocket DB..."));
+    g_pocket_repository = std::unique_ptr<PocketRepository>();
+    if (!g_pocket_repository->Init()) {
+        return InitError(_("Unable to connect sqlite database."));
+    }
+
+    g_benchmark = std::unique_ptr<Benchmark>();
 	// ********************************************************* Step 4.2: Start AddrIndex
 	g_addrindex = std::unique_ptr<AddrIndex>(new AddrIndex());
     gPruneRDB = gArgs.GetBoolArg("-prunerdb", false);

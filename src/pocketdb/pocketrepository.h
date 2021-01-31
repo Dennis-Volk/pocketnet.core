@@ -7,6 +7,7 @@
 #include <string>
 #include <regex>
 #include <sqlite3.h>
+#include "util.h"
 
 using namespace std;
 //-----------------------------------------------------
@@ -199,29 +200,55 @@ struct CommentScore {
     int Value;
 };
 
+// Benchmark model
+struct Checkpoint {
+    long long int Begin;
+    long long int End;
+    string Checkpoint;
+    string Payload;
+};
+
 
 //-----------------------------------------------------
-class SqliteRepository {
+class PocketRepository {
 private:
-    sqlite3* db;
-    bool exec(string sql);
-    string sql(string sql) {
+    sqlite3 *db;
+
+    bool exec(const string &sql);
+
+    static string sql(const string &sql) {
         return regex_replace(sql, regex("'"), "''");
     }
 
 public:
-    SqliteRepository(sqlite3* db);
-    ~SqliteRepository();
+    explicit PocketRepository();
 
-    bool Add(Utxo itm);
-    bool Add(User itm);
-    bool Add(Post itm);
+    ~PocketRepository();
+
+    bool Init(const std::string& table = "ALL");
+
+    bool Add(const Utxo &itm);
+
+    bool Add(const User &itm);
+
+    bool Add(const Post &itm);
+
     bool Add(PostScore itm);
+
     bool Add(Subscribe itm);
+
     bool Add(Blocking itm);
+
     bool Add(Complain itm);
+
     bool Add(Comment itm);
+
     bool Add(CommentScore itm);
+
+    // Runtime benchmark
+    bool Add(Checkpoint itm);
 };
+
+extern std::unique_ptr<PocketRepository> g_pocket_repository;
 //-----------------------------------------------------
 #endif // SQLITE_H

@@ -570,17 +570,15 @@ POCKETCOIN_CORE_H = \
     zmq/zmqnotificationinterface.h \
     zmq/zmqpublishnotifier.h \
     zmq/zmqrpc.h \
-    pocketdb/sqlite.h \
     pocketdb/pocketdb.h \
     antibot/antibot.h \
     index/addrindex.h \
     websocket/ws.h \
-    primitives/rtransaction.cpp \
     primitives/rtransaction.h \
-    html.cpp \
     html.h \
-    pocketdb/pocketnet.cpp \
-    pocketdb/pocketnet.h
+    pocketdb/pocketrepository.h \
+    pocketdb/pocketnet.h \
+    pocketdb/benchmark.h
 
 obj/build.h: FORCE
 	@$(MKDIR_P) $(builddir)/obj
@@ -640,11 +638,15 @@ libpocketcoin_server_a_SOURCES = \
     validation.cpp \
     validationinterface.cpp \
     versionbits.cpp \
-    pocketdb/sqlite.cpp \
     pocketdb/pocketdb.cpp \
     antibot/antibot.cpp \
     index/addrindex.cpp \
     websocket/ws.cpp \
+    pocketdb/pocketrepository.cpp \
+    primitives/rtransaction.cpp \
+    html.cpp \
+    pocketdb/pocketnet.cpp \
+    pocketdb/benchmark.cpp \
     $(POCKETCOIN_CORE_H)
 
 if !ENABLE_WALLET

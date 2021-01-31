@@ -20,9 +20,7 @@ PocketDB::PocketDB()
 }
 PocketDB::~PocketDB()
 {
-    delete sqliteRepository;
     CloseNamespaces();
-    CloseDB();
 }
 
 void PocketDB::CloseNamespaces() {
@@ -46,10 +44,6 @@ void PocketDB::CloseNamespaces() {
     db->CloseNamespace("Addresses");
     db->CloseNamespace("Comments");
     db->CloseNamespace("Comment");
-}
-
-void PocketDB::CloseDB() {
-    sqlite3_close(db3);
 }
 
 // Check for update DB
@@ -89,17 +83,6 @@ bool PocketDB::ConnectDB() {
 
     return InitDB();
 }
-
-bool PocketDB::ConnectDB3() {
-    if (sqlite3_open((GetDataDir() / "pocketdb" / "main.sqlite3").string().c_str(), &db3)) {
-        LogPrintf("Cannot open Sqlite DB (%s) - %s\n", (GetDataDir() / "pocketdb" / "general.sqlite3").string(), sqlite3_errmsg(db3));
-        sqlite3_close(db3);
-        return false;
-    }
-    
-    sqliteRepository = new SqliteRepository(db3);
-    return InitDB3();
-}
 //-----------------------------------------------------
 
 //-----------------------------------------------------
@@ -111,7 +94,6 @@ bool findInVector(std::vector<reindexer::NamespaceDef> defs, std::string name)
 bool PocketDB::Init()
 {
     if (!ConnectDB()) return false;
-    if (!ConnectDB3()) return false;
     if (!UpdateDB()) return false;
     
     LogPrintf("Loaded Reindexer DB (%s)\n", (GetDataDir() / "pocketdb").string());
@@ -419,303 +401,6 @@ bool PocketDB::InitDB(std::string table)
     return true;
 }
 
-bool PocketDB::InitDB3(std::string table)
-{
-    char *zErrMsg = 0;
-
-    // Service
-    if (table == "Service" || table == "ALL") {
-        sqlite3_exec(db3, "create table Service ("
-                          "Service int primary key not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // RI Mempool
-    if (table == "Mempool" || table == "ALL") {
-        sqlite3_exec(db3, "create table Mempool ("
-                          "txid text primary key not null,"
-                          "txid_source text,"
-                          "table text not null,"
-                          "data blob not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Users
-    if (table == "UsersView" || table == "ALL") {
-        sqlite3_exec(db3, "create table UsersView ("
-                          "address text primary key not null,"
-                          "id int,"
-                          "txid text not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "name text not null,"
-                          "birthday int,"
-                          "gender int,"
-                          "regdate int not null,"
-                          "avatar text,"
-                          "about text,"
-                          "lang text,"
-                          "url text,"
-                          "pubkey text,"
-                          "donations text,"
-                          "referrer text,"
-                          "reputation int"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // RI UsersHistory
-    if (table == "Users" || table == "ALL") {
-        sqlite3_exec(db3, "create table Users ("
-                          "address text primary key not null,"
-                          "id int,"
-                          "txid text not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "name text not null,"
-                          "birthday int,"
-                          "gender int,"
-                          "regdate int not null,"
-                          "avatar text,"
-                          "about text,"
-                          "lang text,"
-                          "url text,"
-                          "pubkey text,"
-                          "donations text,"
-                          "referrer text"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // UserRatings
-    if (table == "UserRatings" || table == "ALL") {
-        sqlite3_exec(db3, "create table UserRatings ("
-                          "block int not null,"
-                          "address text not null,"
-                          "reputation int not null,"
-                          "primary key (address, block)"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Posts
-    if (table == "Posts" || table == "ALL") {
-        sqlite3_exec(db3, "create table Posts ("
-                          "txid text primary key not null,"
-                          "txidEdit text,"
-                          "txidRepost text,"
-                          "block int not null,"
-                          "time int not null,"
-                          "address text not null,"
-                          "type int,"
-                          "lang text,"
-                          "caption text,"
-                          "caption_ text,"
-                          "message text,"
-                          "message_ text,"
-                          "tags text,"
-                          "url text,"
-                          "images text,"
-                          "settings text,"
-                          "scoreSum int,"
-                          "scoreCnt int,"
-                          "reputation int"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Posts Hitstory
-    if (table == "PostsHistory" || table == "ALL") {
-        sqlite3_exec(db3, "create table PostsHistory ("
-                          "txid text not null,"
-                          "txidEdit text,"
-                          "txidRepost text,"
-                          "block int not null,"
-                          "time int not null,"
-                          "address text not null,"
-                          "type int,"
-                          "lang text,"
-                          "caption text,"
-                          "message text,"
-                          "tags text,"
-                          "url text,"
-                          "images text,"
-                          "settings text,"
-                          "primary key (txid, block)"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // PostRatings
-    if (table == "PostRatings" || table == "ALL") {
-        sqlite3_exec(db3, "create table PostRatings ("
-                          "block int not null,"
-                          "posttxid text not null,"
-                          "scoreSum text not null,"
-                          "scoreCnt int not null,"
-                          "reputation int not null,"
-                          "primary key (posttxid, block)"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Scores
-    if (table == "Scores" || table == "ALL") {
-        sqlite3_exec(db3, "create table Scores ("
-                          "txid text primary key not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "posttxid text not null,"
-                          "address text not null,"
-                          "value int not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Subscribes
-    if (table == "SubscribesView" || table == "ALL") {
-        sqlite3_exec(db3, "create table SubscribesView ("
-                          "txid text not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "address text not null,"
-                          "address_to text not null,"
-                          "private int not null,"
-                          "primary key (address, address_to)"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // RI SubscribesHistory
-    if (table == "Subscribes" || table == "ALL") {
-        sqlite3_exec(db3, "create table Subscribes ("
-                          "txid text primary key not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "address text not null,"
-                          "address_to text not null,"
-                          "private int not null,"
-                          "unsubscribe int not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Blocking
-    if (table == "BlockingView" || table == "ALL") {
-        sqlite3_exec(db3, "create table BlockingView ("
-                          "txid text primary key not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "address text not null,"
-                          "address_to text not null,"
-                          "address_reputation int not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // BlockingHistory
-    if (table == "Blocking" || table == "ALL") {
-        sqlite3_exec(db3, "create table Blocking ("
-                          "txid text primary key not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "address text not null,"
-                          "address_to text not null,"
-                          "unblocking int not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Complains
-    if (table == "Complains" || table == "ALL") {
-        sqlite3_exec(db3, "create table Complains ("
-                          "txid text primary key not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "posttxid text not null,"
-                          "address text not null,"
-                          "reason int not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // UTXO
-    if (table == "Utxo" || table == "ALL") {
-        sqlite3_exec(db3, "create table Utxo ("
-                          "txid text not null,"
-                          "txout int not null,"
-                          "time int not null,"
-                          "block int not null,"
-                          "address text not null,"
-                          "amount int not null,"
-                          "spent_block int,"
-                          "primary key (txid, txout)"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Addresses
-    if (table == "Addresses" || table == "ALL") {
-        sqlite3_exec(db3, "create table Addresses ("
-                          "address text primary key not null,"
-                          "txid text not null,"
-                          "block text not null,"
-                          "time int not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // Comment
-    if (table == "Comment" || table == "ALL") {
-        sqlite3_exec(db3, "create table Comment ("
-                          "txid text primary key not null,"
-                          "otxid text not null,"
-                          "last int not null,"
-                          "postid text not null,"
-                          "address text not null,"
-                          "time int not null,"
-                          "block int not null,"
-                          "msg text not null,"
-                          "parentid text"
-                          "answerid text"
-                          "scoreUp int"
-                          "scoreDown int"
-                          "reputation int"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // CommentRatings
-    if (table == "CommentRatings" || table == "ALL") {
-        sqlite3_exec(db3, "create table CommentRatings ("
-                          "block int not null,"
-                          "commentid text not null,"
-                          "scoreUp text not null,"
-                          "scoreDown int not null,"
-                          "reputation int not null,"
-                          "primary key (commentid, block)"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    // CommentScores
-    if (table == "CommentScores" || table == "ALL") {
-        sqlite3_exec(db3, "create table CommentScores ("
-                          "txid text primary key not null,"
-                          "block int not null,"
-                          "time int not null,"
-                          "commentid text not null,"
-                          "address text not null,"
-                          "value int not null"
-                          ");",
-            0, 0, &zErrMsg);
-    }
-
-    return true;
-}
-
 bool PocketDB::DropTable(std::string table)
 {
     Error err = db->DropNamespace(table);
@@ -949,7 +634,7 @@ Error PocketDB::UpsertWithCommit(std::string table, Item& item)
 
         // Write to sqlite
         if (table == "UTXO")
-            sqliteRepository->Add({
+            g_pocket_repository->Add({
                 item["txid"].As<string>(),
                 item["txout"].As<int>(),
                 item["time"].As<int64_t>(),
