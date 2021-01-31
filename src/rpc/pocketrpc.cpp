@@ -2454,7 +2454,15 @@ UniValue debug(const JSONRPCRequest& request)
     if (request.fHelp)
         throw std::runtime_error(
             "debug\n"
-            "\nFor debugging purposes.\n");
+            "\nEnable/Disable debug category.\n");
+
+    if (request.params.size() > 0 && request.params[0].isStr()) {
+        std::string category = request.params[0].get_str();
+        // TODO (brangr): достать категорию лога
+        // проверить ее состояние -> включить или выключить
+        // GetLogCategory
+        // WillLogCategory
+    }
 
     UniValue result(UniValue::VOBJ);
 
