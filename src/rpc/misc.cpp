@@ -43,6 +43,7 @@ static UniValue validateaddress(const JSONRPCRequest& request)
             "fields have moved to getaddressinfo and will only be shown here with -deprecatedrpc=validateaddress: ismine, iswatchonly,\n"
             "script, hex, pubkeys, sigsrequired, pubkey, addresses, embedded, iscompressed, account, timestamp, hdkeypath, kdmasterkeyid.\n"
             "\nArguments:\n"
+            "\nArguments:\n"
             "1. \"address\"                    (string, required) The pocketcoin address to validate\n"
             "\nResult:\n"
             "{\n"
@@ -406,7 +407,7 @@ UniValue logging(const JSONRPCRequest& request)
     }
 
     UniValue result(UniValue::VOBJ);
-    std::vector<CLogCategoryActive> vLogCatActive = ListActiveLogCategories();
+    std::vector<CLogCategoryActive> vLogCatActive = g_logger->ListActiveLogCategories();
     for (const auto& logCatActive : vLogCatActive) {
         result.pushKV(logCatActive.category, logCatActive.active);
     }

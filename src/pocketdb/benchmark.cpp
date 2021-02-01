@@ -5,38 +5,19 @@
 std::unique_ptr<Benchmark> g_benchmark;
 
 Benchmark::Benchmark() {
-    _id = 0;
 }
 
 Benchmark::~Benchmark() = default;
 
-int Benchmark::Begin() {
-    // if benchmark allowed
-    if (!gArgs.GetBoolArg("-benchmark", false))
-        return 0;
-
-    int id = 0;
-    {
-        LOCK(cs);
-        id = _id;
-        _id += 1;
-    }
-
-    if (_checkpoints.find(id) != _checkpoints.end()) {
-        _checkpoints.erase(id);
-    }
-
-    auto now = std::chrono::duration_cast<std::chrono::microseconds>(
+long long int Benchmark::Begin() {
+    return std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::system_clock::now().time_since_epoch()
     ).count();
-
-    _checkpoints.insert(std::make_pair(id, now));
-    return id;
 }
 
-void Benchmark::End(int id, const string &checkpoint, const string &payload) {
+void Benchmark::End(long long int begin, const string &checkpoint, const string &payload) {
     // if benchmark allowed
-    if (!gArgs.GetBoolArg("-benchmark", false))
+    if (!g_logger->WillLogCategory(BCLog::BENCHMARK))
         return;
 
     // get end (now) time
@@ -44,15 +25,9 @@ void Benchmark::End(int id, const string &checkpoint, const string &payload) {
         std::chrono::system_clock::now().time_since_epoch()
     ).count();
 
-    // get saved begin time
-    long long int begin = 0;
-    {
-        LOCK(cs);
-        if (_checkpoints.find(id) != _checkpoints.end()) {
-            begin = _checkpoints[id];
-            _checkpoints.erase(id);
-        }
-    }
+    auto sqlBegin = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
 
     // save in db
     g_pocket_repository->Add({
@@ -61,6 +36,12 @@ void Benchmark::End(int id, const string &checkpoint, const string &payload) {
         checkpoint,
         payload
     });
+
+    auto sqlEnd = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
+    LogPrint(BCLog::BENCHMARK, "Benchmark time %s - %lldms (SQL Write: %lldms)\n", checkpoint, (end - begin) / 1000, (sqlEnd - sqlBegin) / 1000);
 }
 
 

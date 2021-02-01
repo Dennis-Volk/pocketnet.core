@@ -44,15 +44,14 @@
 #include <warnings.h>
 
 #include <future>
-#include <sstream>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/thread.hpp>
 #include <univalue.h>
 
-#include <antibot/antibot.h>
-#include <index/addrindex.h>
+#include "antibot/antibot.h"
+#include "index/addrindex.h"
+#include "pocketdb/benchmark.h"
 
 using WsServer = SimpleWeb::SocketServer<SimpleWeb::WS>;
 std::map<std::string, WSUser> WSConnections;
@@ -1856,45 +1855,46 @@ static int64_t nBlocksTotal = 0;
  *  can fail if those validity checks fail (among other reasons). */
 bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, const CChainParams& chainparams, bool fJustCheck)
 {
-	AssertLockHeld(cs_main);
-	assert(pindex);
-	assert(*pindex->phashBlock == block.GetHash());
+    auto benchBegin = g_benchmark->Begin();
 
-	pindex->nMoneySupply = pindex->pprev != NULL ? pindex->pprev->nMoneySupply : 0;
+    AssertLockHeld(cs_main);
+    assert(pindex);
+    assert(*pindex->phashBlock == block.GetHash());
 
-	if (block.IsProofOfStake()) {
-		pindex->SetProofOfStake();
-		pindex->prevoutStake = block.vtx[1]->vin[0].prevout;
-		pindex->nStakeTime = block.vtx[1]->nTime;
-	}
-	else {
-		pindex->prevoutStake.SetNull();
-		pindex->nStakeTime = 0;
-	}
+    pindex->nMoneySupply = pindex->pprev != NULL ? pindex->pprev->nMoneySupply : 0;
 
-	int64_t nTimeStart = GetTimeMicros();
-	int64_t nStakeReward = 0;
+    if (block.IsProofOfStake()) {
+        pindex->SetProofOfStake();
+        pindex->prevoutStake = block.vtx[1]->vin[0].prevout;
+        pindex->nStakeTime = block.vtx[1]->nTime;
+    } else {
+        pindex->prevoutStake.SetNull();
+        pindex->nStakeTime = 0;
+    }
 
-	// Check it again in case a previous version let a bad block in
-	// NOTE: We don't currently (re-)invoke ContextualCheckBlock() or
-	// ContextualCheckBlockHeader() here. This means that if we add a new
-	// consensus rule that is enforced in one of those two functions, then we
-	// may have let in a block that violates the rule prior to updating the
-	// software, and we would NOT be enforcing the rule here. Fully solving
-	// upgrade from one software version to the next after a consensus rule
-	// change is potentially tricky and issue-specific (see RewindBlockIndex()
-	// for one general approach that was used for BIP 141 deployment).
-	// Also, currently the rule against blocks more than 2 hours in the future
-	// is enforced in ContextualCheckBlockHeader(); we wouldn't want to
-	// re-enforce that rule here (at least until we make it impossible for
-	// GetAdjustedTime() to go backward).
-	if (!CheckBlock(block, state, chainparams.GetConsensus(), !fJustCheck, !fJustCheck)) {
-		if (state.CorruptionPossible()) {
-			// We don't write down blocks to disk if they may have been
-			// corrupted, so this should be impossible unless we're having hardware
-			// problems.
-			return AbortNode(state, "Corrupt block found indicating potential hardware failure; shutting down");
-		}
+    int64_t nTimeStart = GetTimeMicros();
+    int64_t nStakeReward = 0;
+
+    // Check it again in case a previous version let a bad block in
+    // NOTE: We don't currently (re-)invoke ContextualCheckBlock() or
+    // ContextualCheckBlockHeader() here. This means that if we add a new
+    // consensus rule that is enforced in one of those two functions, then we
+    // may have let in a block that violates the rule prior to updating the
+    // software, and we would NOT be enforcing the rule here. Fully solving
+    // upgrade from one software version to the next after a consensus rule
+    // change is potentially tricky and issue-specific (see RewindBlockIndex()
+    // for one general approach that was used for BIP 141 deployment).
+    // Also, currently the rule against blocks more than 2 hours in the future
+    // is enforced in ContextualCheckBlockHeader(); we wouldn't want to
+    // re-enforce that rule here (at least until we make it impossible for
+    // GetAdjustedTime() to go backward).
+    if (!CheckBlock(block, state, chainparams.GetConsensus(), !fJustCheck, !fJustCheck)) {
+        if (state.CorruptionPossible()) {
+            // We don't write down blocks to disk if they may have been
+            // corrupted, so this should be impossible unless we're having hardware
+            // problems.
+            return AbortNode(state, "Corrupt block found indicating potential hardware failure; shutting down");
+        }
 
         if (state.Incompleted()) {
             // Incompleted means that the reindexer data is lost.
@@ -1902,289 +1902,289 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
             return false;
         }
 
-		return error("%s: Consensus::CheckBlock: %s", __func__, FormatStateMessage(state));
-	}
+        return error("%s: Consensus::CheckBlock: %s", __func__, FormatStateMessage(state));
+    }
 
-	// verify that the view's current state corresponds to the previous block
-	uint256 hashPrevBlock = pindex->pprev == nullptr ? uint256() : pindex->pprev->GetBlockHash();
-	assert(hashPrevBlock == view.GetBestBlock());
+    // verify that the view's current state corresponds to the previous block
+    uint256 hashPrevBlock = pindex->pprev == nullptr ? uint256() : pindex->pprev->GetBlockHash();
+    assert(hashPrevBlock == view.GetBestBlock());
 
-	// Special case for the genesis block, skipping connection of its transactions
-	// (its coinbase is unspendable)
-	if (block.GetHash() == chainparams.GetConsensus().hashGenesisBlock) {
-		if (!fJustCheck)
-			view.SetBestBlock(pindex->GetBlockHash());
-		return true;
-	}
+    // Special case for the genesis block, skipping connection of its transactions
+    // (its coinbase is unspendable)
+    if (block.GetHash() == chainparams.GetConsensus().hashGenesisBlock) {
+        if (!fJustCheck)
+            view.SetBestBlock(pindex->GetBlockHash());
+        return true;
+    }
 
-	if (pindex->IsProofOfStake())
-		setStakeSeen.insert(std::make_pair(pindex->prevoutStake, pindex->nStakeTime));
+    if (pindex->IsProofOfStake())
+        setStakeSeen.insert(std::make_pair(pindex->prevoutStake, pindex->nStakeTime));
 
-	// Check proof of stake
-	if (block.nBits != GetNextWorkRequired(pindex->pprev, &block, chainparams.GetConsensus())) {
-		return state.DoS(1, error("ContextualCheckBlock() : incorrect %s at height %d (%d)", !block.IsProofOfStake() ? "proof-of-work" : "proof-of-stake", pindex->pprev->nHeight, block.nBits), REJECT_INVALID, "bad-diffbits");
-	}
+    // Check proof of stake
+    if (block.nBits != GetNextWorkRequired(pindex->pprev, &block, chainparams.GetConsensus())) {
+        return state.DoS(1, error("ContextualCheckBlock() : incorrect %s at height %d (%d)", !block.IsProofOfStake() ? "proof-of-work" : "proof-of-stake", pindex->pprev->nHeight, block.nBits), REJECT_INVALID, "bad-diffbits");
+    }
 
-	arith_uint256 hashProof;
+    arith_uint256 hashProof;
 
-	// Verify hash target and signature of coinstake tx
-	CDataStream hashProofOfStakeSource(SER_GETHASH, 0);
-	if (block.IsProofOfStake()) {
-		arith_uint256 targetProofOfStake;
-		// Signature will be checked in CheckInputs(), we can avoid it here (fCheckSignature = false)
-		if (!CheckProofOfStake(pindex->pprev, block.vtx[1], block.nBits, hashProof, hashProofOfStakeSource, targetProofOfStake, NULL, false)) {
-			return error("ContextualCheckBlock() : check proof-of-stake signature failed for block %s", block.GetHash().GetHex());
-		}
-	}
+    // Verify hash target and signature of coinstake tx
+    CDataStream hashProofOfStakeSource(SER_GETHASH, 0);
+    if (block.IsProofOfStake()) {
+        arith_uint256 targetProofOfStake;
+        // Signature will be checked in CheckInputs(), we can avoid it here (fCheckSignature = false)
+        if (!CheckProofOfStake(pindex->pprev, block.vtx[1], block.nBits, hashProof, hashProofOfStakeSource, targetProofOfStake, NULL, false)) {
+            return error("ContextualCheckBlock() : check proof-of-stake signature failed for block %s", block.GetHash().GetHex());
+        }
+    }
 
-	if (block.IsProofOfWork()) {
-		hashProof = UintToArith256(block.GetHash());
-	}
+    if (block.IsProofOfWork()) {
+        hashProof = UintToArith256(block.GetHash());
+    }
 
-	if (!pindex->SetStakeEntropyBit(block.GetStakeEntropyBit()))
-		return state.DoS(1, error("ContextualCheckBlock() : SetStakeEntropyBit() failed"), REJECT_INVALID, "bad-entropy-bit");
+    if (!pindex->SetStakeEntropyBit(block.GetStakeEntropyBit()))
+        return state.DoS(1, error("ContextualCheckBlock() : SetStakeEntropyBit() failed"), REJECT_INVALID, "bad-entropy-bit");
 
-	// Record proof hash value
-	pindex->hashProof = hashProof;
+    // Record proof hash value
+    pindex->hashProof = hashProof;
 
-	uint64_t nStakeModifier = 0;
-	bool fGeneratedStakeModifier = false;
-	if (!ComputeNextStakeModifier(pindex->pprev, nStakeModifier, fGeneratedStakeModifier))
-		return state.DoS(1, error("ContextualCheckBlock() : ComputeNextStakeModifier() failed"), REJECT_INVALID, "bad-stake-modifier");
+    uint64_t nStakeModifier = 0;
+    bool fGeneratedStakeModifier = false;
+    if (!ComputeNextStakeModifier(pindex->pprev, nStakeModifier, fGeneratedStakeModifier))
+        return state.DoS(1, error("ContextualCheckBlock() : ComputeNextStakeModifier() failed"), REJECT_INVALID, "bad-stake-modifier");
 
-	pindex->SetStakeModifier(nStakeModifier, fGeneratedStakeModifier);
+    pindex->SetStakeModifier(nStakeModifier, fGeneratedStakeModifier);
 
-	nBlocksTotal++;
+    nBlocksTotal++;
 
-	bool fScriptChecks = true;
+    bool fScriptChecks = true;
 
-	if (!hashAssumeValid.IsNull()) {
-		// We've been configured with the hash of a block which has been externally verified to have a valid history.
-		// A suitable default value is included with the software and updated from time to time.  Because validity
-		//  relative to a piece of software is an objective fact these defaults can be easily reviewed.
-		// This setting doesn't force the selection of any particular chain but makes validating some faster by
-		//  effectively caching the result of part of the verification.
-		BlockMap::const_iterator it = mapBlockIndex.find(hashAssumeValid);
-		if (it != mapBlockIndex.end()) {
-			if (it->second->GetAncestor(pindex->nHeight) == pindex &&
-				pindexBestHeader->GetAncestor(pindex->nHeight) == pindex &&
-				pindexBestHeader->nChainWork >= nMinimumChainWork) {
-				// This block is a member of the assumed verified chain and an ancestor of the best header.
-				// The equivalent time check discourages hash power from extorting the network via DOS attack
-				//  into accepting an invalid block through telling users they must manually set assumevalid.
-				//  Requiring a software change or burying the invalid block, regardless of the setting, makes
-				//  it hard to hide the implication of the demand.  This also avoids having release candidates
-				//  that are hardly doing any signature verification at all in testing without having to
-				//  artificially set the default assumed verified block further back.
-				// The test against nMinimumChainWork prevents the skipping when denied access to any chain at
-				//  least as good as the expected chain.
-				fScriptChecks = (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, chainparams.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
-			}
-		}
-	}
+    if (!hashAssumeValid.IsNull()) {
+        // We've been configured with the hash of a block which has been externally verified to have a valid history.
+        // A suitable default value is included with the software and updated from time to time.  Because validity
+        //  relative to a piece of software is an objective fact these defaults can be easily reviewed.
+        // This setting doesn't force the selection of any particular chain but makes validating some faster by
+        //  effectively caching the result of part of the verification.
+        BlockMap::const_iterator it = mapBlockIndex.find(hashAssumeValid);
+        if (it != mapBlockIndex.end()) {
+            if (it->second->GetAncestor(pindex->nHeight) == pindex &&
+                pindexBestHeader->GetAncestor(pindex->nHeight) == pindex &&
+                pindexBestHeader->nChainWork >= nMinimumChainWork) {
+                // This block is a member of the assumed verified chain and an ancestor of the best header.
+                // The equivalent time check discourages hash power from extorting the network via DOS attack
+                //  into accepting an invalid block through telling users they must manually set assumevalid.
+                //  Requiring a software change or burying the invalid block, regardless of the setting, makes
+                //  it hard to hide the implication of the demand.  This also avoids having release candidates
+                //  that are hardly doing any signature verification at all in testing without having to
+                //  artificially set the default assumed verified block further back.
+                // The test against nMinimumChainWork prevents the skipping when denied access to any chain at
+                //  least as good as the expected chain.
+                fScriptChecks = (GetBlockProofEquivalentTime(*pindexBestHeader, *pindex, *pindexBestHeader, chainparams.GetConsensus()) <= 60 * 60 * 24 * 7 * 2);
+            }
+        }
+    }
 
-	int64_t nTime1 = GetTimeMicros();
-	nTimeCheck += nTime1 - nTimeStart;
-	LogPrint(BCLog::BENCH, "    - Sanity checks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime1 - nTimeStart), nTimeCheck * MICRO, nTimeCheck * MILLI / nBlocksTotal);
+    int64_t nTime1 = GetTimeMicros();
+    nTimeCheck += nTime1 - nTimeStart;
+    LogPrint(BCLog::BENCH, "    - Sanity checks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime1 - nTimeStart), nTimeCheck * MICRO, nTimeCheck * MILLI / nBlocksTotal);
 
-	// Do not allow blocks that contain transactions which 'overwrite' older transactions,
-	// unless those are already completely spent.
-	// If such overwrites are allowed, coinbases and transactions depending upon those
-	// can be duplicated to remove the ability to spend the first instance -- even after
-	// being sent to another address.
-	// See BIP30 and http://r6.ca/blog/20120206T005236Z.html for more information.
-	// This logic is not necessary for memory pool transactions, as AcceptToMemoryPool
-	// already refuses previously-known transaction ids entirely.
-	// This rule was originally applied to all blocks with a timestamp after March 15, 2012, 0:00 UTC.
-	// Now that the whole chain is irreversibly beyond that time it is applied to all blocks except the
-	// two in the chain that violate it. This prevents exploiting the issue against nodes during their
-	// initial block download.
+    // Do not allow blocks that contain transactions which 'overwrite' older transactions,
+    // unless those are already completely spent.
+    // If such overwrites are allowed, coinbases and transactions depending upon those
+    // can be duplicated to remove the ability to spend the first instance -- even after
+    // being sent to another address.
+    // See BIP30 and http://r6.ca/blog/20120206T005236Z.html for more information.
+    // This logic is not necessary for memory pool transactions, as AcceptToMemoryPool
+    // already refuses previously-known transaction ids entirely.
+    // This rule was originally applied to all blocks with a timestamp after March 15, 2012, 0:00 UTC.
+    // Now that the whole chain is irreversibly beyond that time it is applied to all blocks except the
+    // two in the chain that violate it. This prevents exploiting the issue against nodes during their
+    // initial block download.
 
-	/*bool fEnforceBIP30 = !((pindex->nHeight == 91842 && pindex->GetBlockHash() == uint256S("0x00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")) ||
+    /*bool fEnforceBIP30 = !((pindex->nHeight == 91842 && pindex->GetBlockHash() == uint256S("0x00000000000a4d0a398161ffc163c503763b1f4360639393e0e4c8e300e0caec")) ||
 						   (pindex->nHeight == 91880 && pindex->GetBlockHash() == uint256S("0x00000000000743f190a18c5577a3c2d2a1f610ae9601ac046a38084ccb7cd721")));*/
 
-	bool fEnforceBIP30 = (!pindex->phashBlock);
+    bool fEnforceBIP30 = (!pindex->phashBlock);
 
-	// Once BIP34 activated it was not possible to create new duplicate coinbases and thus other than starting
-	// with the 2 existing duplicate coinbase pairs, not possible to create overwriting txs.  But by the
-	// time BIP34 activated, in each of the existing pairs the duplicate coinbase had overwritten the first
-	// before the first had been spent.  Since those coinbases are sufficiently buried it's no longer possible to create further
-	// duplicate transactions descending from the known pairs either.
-	// If we're on the known chain at height greater than where BIP34 activated, we can save the db accesses needed for the BIP30 check.
+    // Once BIP34 activated it was not possible to create new duplicate coinbases and thus other than starting
+    // with the 2 existing duplicate coinbase pairs, not possible to create overwriting txs.  But by the
+    // time BIP34 activated, in each of the existing pairs the duplicate coinbase had overwritten the first
+    // before the first had been spent.  Since those coinbases are sufficiently buried it's no longer possible to create further
+    // duplicate transactions descending from the known pairs either.
+    // If we're on the known chain at height greater than where BIP34 activated, we can save the db accesses needed for the BIP30 check.
 
-	// BIP34 requires that a block at height X (block X) has its coinbase
-	// scriptSig start with a CScriptNum of X (indicated height X).  The above
-	// logic of no longer requiring BIP30 once BIP34 activates is flawed in the
-	// case that there is a block X before the BIP34 height of 227,931 which has
-	// an indicated height Y where Y is greater than X.  The coinbase for block
-	// X would also be a valid coinbase for block Y, which could be a BIP30
-	// violation.  An exhaustive search of all mainnet coinbases before the
-	// BIP34 height which have an indicated height greater than the block height
-	// reveals many occurrences. The 3 lowest indicated heights found are
-	// 209,921, 490,897, and 1,983,702 and thus coinbases for blocks at these 3
-	// heights would be the first opportunity for BIP30 to be violated.
+    // BIP34 requires that a block at height X (block X) has its coinbase
+    // scriptSig start with a CScriptNum of X (indicated height X).  The above
+    // logic of no longer requiring BIP30 once BIP34 activates is flawed in the
+    // case that there is a block X before the BIP34 height of 227,931 which has
+    // an indicated height Y where Y is greater than X.  The coinbase for block
+    // X would also be a valid coinbase for block Y, which could be a BIP30
+    // violation.  An exhaustive search of all mainnet coinbases before the
+    // BIP34 height which have an indicated height greater than the block height
+    // reveals many occurrences. The 3 lowest indicated heights found are
+    // 209,921, 490,897, and 1,983,702 and thus coinbases for blocks at these 3
+    // heights would be the first opportunity for BIP30 to be violated.
 
-	// The search reveals a great many blocks which have an indicated height
-	// greater than 1,983,702, so we simply remove the optimization to skip
-	// BIP30 checking for blocks at height 1,983,702 or higher.  Before we reach
-	// that block in another 25 years or so, we should take advantage of a
-	// future consensus change to do a new and improved version of BIP34 that
-	// will actually prevent ever creating any duplicate coinbases in the
-	// future.
-	static constexpr int BIP34_IMPLIES_BIP30_LIMIT = 1983702;
+    // The search reveals a great many blocks which have an indicated height
+    // greater than 1,983,702, so we simply remove the optimization to skip
+    // BIP30 checking for blocks at height 1,983,702 or higher.  Before we reach
+    // that block in another 25 years or so, we should take advantage of a
+    // future consensus change to do a new and improved version of BIP34 that
+    // will actually prevent ever creating any duplicate coinbases in the
+    // future.
+    static constexpr int BIP34_IMPLIES_BIP30_LIMIT = 1983702;
 
-	// There is no potential to create a duplicate coinbase at block 209,921
-	// because this is still before the BIP34 height and so explicit BIP30
-	// checking is still active.
+    // There is no potential to create a duplicate coinbase at block 209,921
+    // because this is still before the BIP34 height and so explicit BIP30
+    // checking is still active.
 
-	// The final case is block 176,684 which has an indicated height of
-	// 490,897. Unfortunately, this issue was not discovered until about 2 weeks
-	// before block 490,897 so there was not much opportunity to address this
-	// case other than to carefully analyze it and determine it would not be a
-	// problem. Block 490,897 was, in fact, mined with a different coinbase than
-	// block 176,684, but it is important to note that even if it hadn't been or
-	// is remined on an alternate fork with a duplicate coinbase, we would still
-	// not run into a BIP30 violation.  This is because the coinbase for 176,684
-	// is spent in block 185,956 in transaction
-	// d4f7fbbf92f4a3014a230b2dc70b8058d02eb36ac06b4a0736d9d60eaa9e8781.  This
-	// spending transaction can't be duplicated because it also spends coinbase
-	// 0328dd85c331237f18e781d692c92de57649529bd5edf1d01036daea32ffde29.  This
-	// coinbase has an indicated height of over 4.2 billion, and wouldn't be
-	// duplicatable until that height, and it's currently impossible to create a
-	// chain that long. Nevertheless we may wish to consider a future soft fork
-	// which retroactively prevents block 490,897 from creating a duplicate
-	// coinbase. The two historical BIP30 violations often provide a confusing
-	// edge case when manipulating the UTXO and it would be simpler not to have
-	// another edge case to deal with.
+    // The final case is block 176,684 which has an indicated height of
+    // 490,897. Unfortunately, this issue was not discovered until about 2 weeks
+    // before block 490,897 so there was not much opportunity to address this
+    // case other than to carefully analyze it and determine it would not be a
+    // problem. Block 490,897 was, in fact, mined with a different coinbase than
+    // block 176,684, but it is important to note that even if it hadn't been or
+    // is remined on an alternate fork with a duplicate coinbase, we would still
+    // not run into a BIP30 violation.  This is because the coinbase for 176,684
+    // is spent in block 185,956 in transaction
+    // d4f7fbbf92f4a3014a230b2dc70b8058d02eb36ac06b4a0736d9d60eaa9e8781.  This
+    // spending transaction can't be duplicated because it also spends coinbase
+    // 0328dd85c331237f18e781d692c92de57649529bd5edf1d01036daea32ffde29.  This
+    // coinbase has an indicated height of over 4.2 billion, and wouldn't be
+    // duplicatable until that height, and it's currently impossible to create a
+    // chain that long. Nevertheless we may wish to consider a future soft fork
+    // which retroactively prevents block 490,897 from creating a duplicate
+    // coinbase. The two historical BIP30 violations often provide a confusing
+    // edge case when manipulating the UTXO and it would be simpler not to have
+    // another edge case to deal with.
 
-	// testnet3 has no blocks before the BIP34 height with indicated heights
-	// post BIP34 before approximately height 486,000,000 and presumably will
-	// be reset before it reaches block 1,983,702 and starts doing unnecessary
-	// BIP30 checking again.
-	assert(pindex->pprev);
-	CBlockIndex* pindexBIP34height = pindex->pprev->GetAncestor(chainparams.GetConsensus().BIP34Height);
-	//Only continue to enforce if we're below BIP34 activation height or the block hash at that height doesn't correspond.
-	fEnforceBIP30 = fEnforceBIP30 && (!pindexBIP34height || !(pindexBIP34height->GetBlockHash() == chainparams.GetConsensus().BIP34Hash));
+    // testnet3 has no blocks before the BIP34 height with indicated heights
+    // post BIP34 before approximately height 486,000,000 and presumably will
+    // be reset before it reaches block 1,983,702 and starts doing unnecessary
+    // BIP30 checking again.
+    assert(pindex->pprev);
+    CBlockIndex* pindexBIP34height = pindex->pprev->GetAncestor(chainparams.GetConsensus().BIP34Height);
+    //Only continue to enforce if we're below BIP34 activation height or the block hash at that height doesn't correspond.
+    fEnforceBIP30 = fEnforceBIP30 && (!pindexBIP34height || !(pindexBIP34height->GetBlockHash() == chainparams.GetConsensus().BIP34Hash));
 
-	// TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
-	// consensus change that ensures coinbases at those heights can not
-	// duplicate earlier coinbases.
-	if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
-		for (const auto& tx : block.vtx) {
-			for (size_t o = 0; o < tx->vout.size(); o++) {
-				if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
-					return state.DoS(100, error("ConnectBlock(): tried to overwrite transaction"),
-						REJECT_INVALID, "bad-txns-BIP30");
-				}
-			}
-		}
-	}
+    // TODO: Remove BIP30 checking from block height 1,983,702 on, once we have a
+    // consensus change that ensures coinbases at those heights can not
+    // duplicate earlier coinbases.
+    if (fEnforceBIP30 || pindex->nHeight >= BIP34_IMPLIES_BIP30_LIMIT) {
+        for (const auto& tx : block.vtx) {
+            for (size_t o = 0; o < tx->vout.size(); o++) {
+                if (view.HaveCoin(COutPoint(tx->GetHash(), o))) {
+                    return state.DoS(100, error("ConnectBlock(): tried to overwrite transaction"),
+                        REJECT_INVALID, "bad-txns-BIP30");
+                }
+            }
+        }
+    }
 
-	// Start enforcing BIP68 (sequence locks) and BIP112 (CHECKSEQUENCEVERIFY) using versionbits logic.
-	int nLockTimeFlags = 0;
-	if (VersionBitsState(pindex->pprev, chainparams.GetConsensus(), Consensus::DEPLOYMENT_CSV, versionbitscache) == ThresholdState::ACTIVE) {
-		nLockTimeFlags |= LOCKTIME_VERIFY_SEQUENCE;
-	}
+    // Start enforcing BIP68 (sequence locks) and BIP112 (CHECKSEQUENCEVERIFY) using versionbits logic.
+    int nLockTimeFlags = 0;
+    if (VersionBitsState(pindex->pprev, chainparams.GetConsensus(), Consensus::DEPLOYMENT_CSV, versionbitscache) == ThresholdState::ACTIVE) {
+        nLockTimeFlags |= LOCKTIME_VERIFY_SEQUENCE;
+    }
 
-	// Get the script flags for this block
-	unsigned int flags = GetBlockScriptFlags(pindex, chainparams.GetConsensus());
+    // Get the script flags for this block
+    unsigned int flags = GetBlockScriptFlags(pindex, chainparams.GetConsensus());
 
-	int64_t nTime2 = GetTimeMicros();
-	nTimeForks += nTime2 - nTime1;
-	LogPrint(BCLog::BENCH, "    - Fork checks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime2 - nTime1), nTimeForks * MICRO, nTimeForks * MILLI / nBlocksTotal);
+    int64_t nTime2 = GetTimeMicros();
+    nTimeForks += nTime2 - nTime1;
+    LogPrint(BCLog::BENCH, "    - Fork checks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime2 - nTime1), nTimeForks * MICRO, nTimeForks * MILLI / nBlocksTotal);
 
-	CBlockUndo blockundo;
+    CBlockUndo blockundo;
 
-	CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : nullptr);
+    CCheckQueueControl<CScriptCheck> control(fScriptChecks && nScriptCheckThreads ? &scriptcheckqueue : nullptr);
 
-	std::vector<int> prevheights;
-	CAmount nFees = 0;
-	int nInputs = 0;
-	int64_t nSigOpsCost = 0;
-	blockundo.vtxundo.reserve(block.vtx.size() - 1);
-	std::vector<PrecomputedTransactionData> txdata;
-	txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
-	for (unsigned int i = 0; i < block.vtx.size(); i++) {
-		const CTransaction& tx = *(block.vtx[i]);
+    std::vector<int> prevheights;
+    CAmount nFees = 0;
+    int nInputs = 0;
+    int64_t nSigOpsCost = 0;
+    blockundo.vtxundo.reserve(block.vtx.size() - 1);
+    std::vector<PrecomputedTransactionData> txdata;
+    txdata.reserve(block.vtx.size()); // Required so that pointers to individual PrecomputedTransactionData don't get invalidated
+    for (unsigned int i = 0; i < block.vtx.size(); i++) {
+        const CTransaction& tx = *(block.vtx[i]);
 
-		nInputs += tx.vin.size();
+        nInputs += tx.vin.size();
 
-		if (!tx.IsCoinBase()) {
-			CAmount txfee = 0;
-			if (!Consensus::CheckTxInputs(tx, state, view, pindex->nHeight, txfee, chainparams)) {
-				return error("%s: Consensus::CheckTxInputs: %s, %s", __func__, tx.GetHash().ToString(), FormatStateMessage(state));
-			}
-			nFees += txfee;
-			if (!MoneyRange(nFees)) {
-				return state.DoS(100, error("%s: accumulated fee in the block out of range.", __func__),
-					REJECT_INVALID, "bad-txns-accumulated-fee-outofrange");
-			}
+        if (!tx.IsCoinBase()) {
+            CAmount txfee = 0;
+            if (!Consensus::CheckTxInputs(tx, state, view, pindex->nHeight, txfee, chainparams)) {
+                return error("%s: Consensus::CheckTxInputs: %s, %s", __func__, tx.GetHash().ToString(), FormatStateMessage(state));
+            }
+            nFees += txfee;
+            if (!MoneyRange(nFees)) {
+                return state.DoS(100, error("%s: accumulated fee in the block out of range.", __func__),
+                    REJECT_INVALID, "bad-txns-accumulated-fee-outofrange");
+            }
 
-			// Check that transaction is BIP68 final
-			// BIP68 lock checks (as opposed to nLockTime checks) must
-			// be in ConnectBlock because they require the UTXO set
-			prevheights.resize(tx.vin.size());
-			for (size_t j = 0; j < tx.vin.size(); j++) {
-				prevheights[j] = view.AccessCoin(tx.vin[j].prevout).nHeight;
-			}
+            // Check that transaction is BIP68 final
+            // BIP68 lock checks (as opposed to nLockTime checks) must
+            // be in ConnectBlock because they require the UTXO set
+            prevheights.resize(tx.vin.size());
+            for (size_t j = 0; j < tx.vin.size(); j++) {
+                prevheights[j] = view.AccessCoin(tx.vin[j].prevout).nHeight;
+            }
 
-			if (!SequenceLocks(tx, nLockTimeFlags, &prevheights, *pindex)) {
-				return state.DoS(100, error("%s: contains a non-BIP68-final transaction", __func__),
-					REJECT_INVALID, "bad-txns-nonfinal");
-			}
-		}
+            if (!SequenceLocks(tx, nLockTimeFlags, &prevheights, *pindex)) {
+                return state.DoS(100, error("%s: contains a non-BIP68-final transaction", __func__),
+                    REJECT_INVALID, "bad-txns-nonfinal");
+            }
+        }
 
-		// GetTransactionSigOpCost counts 3 types of sigops:
-		// * legacy (always)
-		// * p2sh (when P2SH enabled in flags and excludes coinbase)
-		// * witness (when witness enabled in flags and excludes coinbase)
-		nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
-		if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST)
-			return state.DoS(100, error("ConnectBlock(): too many sigops"),
-				REJECT_INVALID, "bad-blk-sigops");
+        // GetTransactionSigOpCost counts 3 types of sigops:
+        // * legacy (always)
+        // * p2sh (when P2SH enabled in flags and excludes coinbase)
+        // * witness (when witness enabled in flags and excludes coinbase)
+        nSigOpsCost += GetTransactionSigOpCost(tx, view, flags);
+        if (nSigOpsCost > MAX_BLOCK_SIGOPS_COST)
+            return state.DoS(100, error("ConnectBlock(): too many sigops"),
+                REJECT_INVALID, "bad-blk-sigops");
 
-		txdata.emplace_back(tx);
-		if (!tx.IsCoinBase()) {
-			if (!tx.IsCoinStake()) {
-				nFees += view.GetValueIn(tx) - tx.GetValueOut();
-			}
-			if (tx.IsCoinStake()) {
-				nStakeReward = tx.GetValueOut() - view.GetValueIn(tx);
+        txdata.emplace_back(tx);
+        if (!tx.IsCoinBase()) {
+            if (!tx.IsCoinStake()) {
+                nFees += view.GetValueIn(tx) - tx.GetValueOut();
+            }
+            if (tx.IsCoinStake()) {
+                nStakeReward = tx.GetValueOut() - view.GetValueIn(tx);
 
-				if (view.GetValueIn(tx) < Params().GetConsensus().nStakeMinimumThreshold) {
-					return state.DoS(100, error(
-						"ConnectBlock(): Stake input is below threshold",
-						REJECT_INVALID,
-						"bad-blk-stake-inputs"));
-				}
-			}
+                if (view.GetValueIn(tx) < Params().GetConsensus().nStakeMinimumThreshold) {
+                    return state.DoS(100, error(
+                                              "ConnectBlock(): Stake input is below threshold",
+                                              REJECT_INVALID,
+                                              "bad-blk-stake-inputs"));
+                }
+            }
 
-			std::vector<CScriptCheck> vChecks;
-			bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
-			if (!CheckInputs(tx, state, view, fScriptChecks, flags, fCacheResults, fCacheResults, txdata[i], nScriptCheckThreads ? &vChecks : nullptr))
-				return error("ConnectBlock(): CheckInputs on %s failed with %s",
-					tx.GetHash().ToString(), FormatStateMessage(state));
-			control.Add(vChecks);
-		}
+            std::vector<CScriptCheck> vChecks;
+            bool fCacheResults = fJustCheck; /* Don't cache results if we're actually connecting blocks (still consult the cache, though) */
+            if (!CheckInputs(tx, state, view, fScriptChecks, flags, fCacheResults, fCacheResults, txdata[i], nScriptCheckThreads ? &vChecks : nullptr))
+                return error("ConnectBlock(): CheckInputs on %s failed with %s",
+                    tx.GetHash().ToString(), FormatStateMessage(state));
+            control.Add(vChecks);
+        }
 
-		CTxUndo undoDummy;
-		if (i > 0) {
-			blockundo.vtxundo.push_back(CTxUndo());
-		}
-		UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
-	}
-	int64_t nTime3 = GetTimeMicros();
-	nTimeConnect += nTime3 - nTime2;
-	LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs - 1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
+        CTxUndo undoDummy;
+        if (i > 0) {
+            blockundo.vtxundo.push_back(CTxUndo());
+        }
+        UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
+    }
+    int64_t nTime3 = GetTimeMicros();
+    nTimeConnect += nTime3 - nTime2;
+    LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs - 1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-	if (block.IsProofOfWork()) {
-		CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
-		if (block.vtx[0]->GetValueOut() > blockReward)
-			return state.DoS(100,
-				error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
-					block.vtx[0]->GetValueOut(), blockReward),
-				REJECT_INVALID, "bad-cb-amount");
-	}
+    if (block.IsProofOfWork()) {
+        CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+        if (block.vtx[0]->GetValueOut() > blockReward)
+            return state.DoS(100,
+                error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
+                    block.vtx[0]->GetValueOut(), blockReward),
+                REJECT_INVALID, "bad-cb-amount");
+    }
 
     if (pindex->nHeight == Params().GetConsensus().nHeight_version_1_0_0_pre) {
         if (pindex->GetBlockHash().GetHex() != Params().GetConsensus().sVersion_1_0_0_pre_checkpoint) {
@@ -2192,26 +2192,26 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         }
     }
 
-	if (pindex->nHeight > Params().GetConsensus().nHeight_version_1_0_0_pre && block.IsProofOfStake()) {
-		int64_t nCalculatedStakeReward = GetProofOfStakeReward(pindex->nHeight, nFees, chainparams.GetConsensus());
+    if (pindex->nHeight > Params().GetConsensus().nHeight_version_1_0_0_pre && block.IsProofOfStake()) {
+        int64_t nCalculatedStakeReward = GetProofOfStakeReward(pindex->nHeight, nFees, chainparams.GetConsensus());
 
-		if (nStakeReward > nCalculatedStakeReward) {
-			return state.DoS(100, error("ConnectBlock() : coinstake pays too much(actual=%d vs calculated=%d)", nStakeReward, nCalculatedStakeReward));
-		}
-		int64_t nReward = GetProofOfStakeReward(pindex->nHeight, 0, chainparams.GetConsensus());
+        if (nStakeReward > nCalculatedStakeReward) {
+            return state.DoS(100, error("ConnectBlock() : coinstake pays too much(actual=%d vs calculated=%d)", nStakeReward, nCalculatedStakeReward));
+        }
+        int64_t nReward = GetProofOfStakeReward(pindex->nHeight, 0, chainparams.GetConsensus());
 
-		if (!CheckBlockRatingRewards(block, pindex->pprev, nReward, hashProofOfStakeSource)) {
+        if (!CheckBlockRatingRewards(block, pindex->pprev, nReward, hashProofOfStakeSource)) {
             if (IsCheckpointBlock(pindex->nHeight, block.GetHash().ToString()))
                 LogPrintf("Found checkpoint block %s\n", block.GetHash().ToString());
             else
                 return state.DoS(100, error("ConnectBlock() : incorrect rating rewards paid out"));
-		}
-	}
+        }
+    }
 
-	if (!control.Wait())
-		return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
+    if (!control.Wait())
+        return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
 
-	//----------------------------------------------------------------------------------
+    //----------------------------------------------------------------------------------
     // Check reindexer data exists and Antibot checks
     if (!CheckBlockAdditional(pindex, block, state)) {
         return false;
@@ -2223,22 +2223,22 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     {
         uint256 blockhash = block.GetHash();
 
-		// Write received PocketNET data to RIDB
-		if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
-			std::string _pocket_data = POCKETNET_DATA[blockhash];
+        // Write received PocketNET data to RIDB
+        if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
+            std::string _pocket_data = POCKETNET_DATA[blockhash];
             if (!g_addrindex->SetBlockRIData(_pocket_data, pindex->nHeight)) {
                 LogPrintf("--- Failed restore received data (%s) (AddrIndex::SetBlockRIData)\n", blockhash.GetHex());
                 return false;
             }
 
-			POCKETNET_DATA.erase(blockhash);
-		}
+            POCKETNET_DATA.erase(blockhash);
+        }
 
-		// Get data from RIMempool and write to general RI tables
+        // Get data from RIMempool and write to general RI tables
         if (!g_addrindex->CommitRIMempool(block, pindex->nHeight)) {
             LogPrintf("--- Failed restore RI Mempool block (%s) (AddrIndex::CommitRIMempool)\n", blockhash.GetHex());
             return false;
-		}
+        }
 
         // Indexing new block
         if (!g_addrindex->IndexBlock(block, pindex)) {
@@ -2246,35 +2246,40 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
             return false;
         }
     }
-	//-----------------------------------------------------
-	int64_t nTime4 = GetTimeMicros();
-	nTimeVerify += nTime4 - nTime2;
-	LogPrint(BCLog::BENCH, "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs (%.2fms/blk)]\n", nInputs - 1, MILLI * (nTime4 - nTime2), nInputs <= 1 ? 0 : MILLI * (nTime4 - nTime2) / (nInputs - 1), nTimeVerify * MICRO, nTimeVerify * MILLI / nBlocksTotal);
+    //-----------------------------------------------------
+    int64_t nTime4 = GetTimeMicros();
+    nTimeVerify += nTime4 - nTime2;
+    LogPrint(BCLog::BENCH, "    - Verify %u txins: %.2fms (%.3fms/txin) [%.2fs (%.2fms/blk)]\n", nInputs - 1, MILLI * (nTime4 - nTime2), nInputs <= 1 ? 0 : MILLI * (nTime4 - nTime2) / (nInputs - 1), nTimeVerify * MICRO, nTimeVerify * MILLI / nBlocksTotal);
 
-	if (fJustCheck)
-		return true;
+    if (fJustCheck)
+        return true;
 
-	if (!WriteUndoDataForBlock(blockundo, state, pindex, chainparams))
-		return false;
+    if (!WriteUndoDataForBlock(blockundo, state, pindex, chainparams))
+        return false;
 
-	if (!pindex->IsValid(BLOCK_VALID_SCRIPTS)) {
-		pindex->RaiseValidity(BLOCK_VALID_SCRIPTS);
-		setDirtyBlockIndex.insert(pindex);
-	}
+    if (!pindex->IsValid(BLOCK_VALID_SCRIPTS)) {
+        pindex->RaiseValidity(BLOCK_VALID_SCRIPTS);
+        setDirtyBlockIndex.insert(pindex);
+    }
 
-	assert(pindex->phashBlock);
-	// add this block to the view's block chain
-	view.SetBestBlock(pindex->GetBlockHash());
+    assert(pindex->phashBlock);
+    // add this block to the view's block chain
+    view.SetBestBlock(pindex->GetBlockHash());
 
-	int64_t nTime5 = GetTimeMicros();
-	nTimeIndex += nTime5 - nTime4;
-	LogPrint(BCLog::BENCH, "    - Index writing: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime5 - nTime4), nTimeIndex * MICRO, nTimeIndex * MILLI / nBlocksTotal);
+    int64_t nTime5 = GetTimeMicros();
+    nTimeIndex += nTime5 - nTime4;
+    LogPrint(BCLog::BENCH, "    - Index writing: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime5 - nTime4), nTimeIndex * MICRO, nTimeIndex * MILLI / nBlocksTotal);
 
-	int64_t nTime6 = GetTimeMicros();
-	nTimeCallbacks += nTime6 - nTime5;
-	LogPrint(BCLog::BENCH, "    - Callbacks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime6 - nTime5), nTimeCallbacks * MICRO, nTimeCallbacks * MILLI / nBlocksTotal);
+    int64_t nTime6 = GetTimeMicros();
+    nTimeCallbacks += nTime6 - nTime5;
+    LogPrint(BCLog::BENCH, "    - Callbacks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime6 - nTime5), nTimeCallbacks * MICRO, nTimeCallbacks * MILLI / nBlocksTotal);
 
-	return true;
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("block", pindex->nHeight);
+    payload.pushKV("hash", pindex->GetBlockHash().GetHex());
+    g_benchmark->End(benchBegin, "fnc_CChainState::ConnectBlock", payload.write());
+
+    return true;
 }
 
 /**
@@ -2638,167 +2643,174 @@ public:
  */
 bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexNew, const std::shared_ptr<const CBlock>& pblock, ConnectTrace& connectTrace, DisconnectedBlockTransactions& disconnectpool)
 {
-	assert(pindexNew->pprev == chainActive.Tip());
-	// Read block from disk.
-	int64_t nTime1 = GetTimeMicros();
-	std::shared_ptr<const CBlock> pthisBlock;
-	if (!pblock) {
-		std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
-		if (!ReadBlockFromDisk(*pblockNew, pindexNew, chainparams.GetConsensus()))
-			return AbortNode(state, "Failed to read block");
-		pthisBlock = pblockNew;
-	}
-	else {
-		pthisBlock = pblock;
-	}
-	const CBlock& blockConnecting = *pthisBlock;
-	// Apply the block atomically to the chain state.
-	int64_t nTime2 = GetTimeMicros();
-	nTimeReadFromDisk += nTime2 - nTime1;
-	int64_t nTime3;
-	LogPrint(BCLog::BENCH, "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * MILLI, nTimeReadFromDisk * MICRO);
-	{
-		CCoinsViewCache view(pcoinsTip.get());
-		bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, chainparams);
-		GetMainSignals().BlockChecked(blockConnecting, state);
-		if (!rv) {
-			if (state.IsInvalid()) {
+    auto benchBegin = g_benchmark->Begin();
 
+    assert(pindexNew->pprev == chainActive.Tip());
+    // Read block from disk.
+    int64_t nTime1 = GetTimeMicros();
+    std::shared_ptr<const CBlock> pthisBlock;
+    if (!pblock) {
+        std::shared_ptr<CBlock> pblockNew = std::make_shared<CBlock>();
+        if (!ReadBlockFromDisk(*pblockNew, pindexNew, chainparams.GetConsensus()))
+            return AbortNode(state, "Failed to read block");
+        pthisBlock = pblockNew;
+    } else {
+        pthisBlock = pblock;
+    }
+    const CBlock& blockConnecting = *pthisBlock;
+    // Apply the block atomically to the chain state.
+    int64_t nTime2 = GetTimeMicros();
+    nTimeReadFromDisk += nTime2 - nTime1;
+    int64_t nTime3;
+    LogPrint(BCLog::BENCH, "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * MILLI, nTimeReadFromDisk * MICRO);
+    {
+        CCoinsViewCache view(pcoinsTip.get());
+        bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, chainparams);
+        GetMainSignals().BlockChecked(blockConnecting, state);
+        if (!rv) {
+            if (state.IsInvalid()) {
                 if (state.Incompleted()) {
                     pindexNew->nStatus &= ~BLOCK_HAVE_DATA;
                 } else {
-				    InvalidBlockFound(pindexNew, state);
+                    InvalidBlockFound(pindexNew, state);
                 }
             }
 
-			return error("%s: ConnectBlock %s failed, %s", __func__, pindexNew->GetBlockHash().ToString(), FormatStateMessage(state));
-		}
-		nTime3 = GetTimeMicros();
-		nTimeConnectTotal += nTime3 - nTime2;
-		LogPrint(BCLog::BENCH, "  - Connect total: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime3 - nTime2) * MILLI, nTimeConnectTotal * MICRO, nTimeConnectTotal * MILLI / nBlocksTotal);
-		bool flushed = view.Flush();
-		assert(flushed);
-	}
-	int64_t nTime4 = GetTimeMicros();
-	nTimeFlush += nTime4 - nTime3;
-	LogPrint(BCLog::BENCH, "  - Flush: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime4 - nTime3) * MILLI, nTimeFlush * MICRO, nTimeFlush * MILLI / nBlocksTotal);
-	// Write the chain state to disk, if necessary.
-	if (!FlushStateToDisk(chainparams, state, FlushStateMode::IF_NEEDED))
-		return false;
-	int64_t nTime5 = GetTimeMicros();
-	nTimeChainState += nTime5 - nTime4;
-	LogPrint(BCLog::BENCH, "  - Writing chainstate: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime5 - nTime4) * MILLI, nTimeChainState * MICRO, nTimeChainState * MILLI / nBlocksTotal);
+            return error("%s: ConnectBlock %s failed, %s", __func__, pindexNew->GetBlockHash().ToString(), FormatStateMessage(state));
+        }
+        nTime3 = GetTimeMicros();
+        nTimeConnectTotal += nTime3 - nTime2;
+        LogPrint(BCLog::BENCH, "  - Connect total: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime3 - nTime2) * MILLI, nTimeConnectTotal * MICRO, nTimeConnectTotal * MILLI / nBlocksTotal);
+        bool flushed = view.Flush();
+        assert(flushed);
+    }
+    int64_t nTime4 = GetTimeMicros();
+    nTimeFlush += nTime4 - nTime3;
+    LogPrint(BCLog::BENCH, "  - Flush: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime4 - nTime3) * MILLI, nTimeFlush * MICRO, nTimeFlush * MILLI / nBlocksTotal);
+    // Write the chain state to disk, if necessary.
+    if (!FlushStateToDisk(chainparams, state, FlushStateMode::IF_NEEDED))
+        return false;
+    int64_t nTime5 = GetTimeMicros();
+    nTimeChainState += nTime5 - nTime4;
+    LogPrint(BCLog::BENCH, "  - Writing chainstate: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime5 - nTime4) * MILLI, nTimeChainState * MICRO, nTimeChainState * MILLI / nBlocksTotal);
     //-----------------------------------------------------
-	// Remove conflicting transactions from the mempool.;
-	mempool.removeForBlock(blockConnecting.vtx, pindexNew->nHeight);
-	disconnectpool.removeForBlock(blockConnecting.vtx);
+    // Remove conflicting transactions from the mempool.;
+    mempool.removeForBlock(blockConnecting.vtx, pindexNew->nHeight);
+    disconnectpool.removeForBlock(blockConnecting.vtx);
     //-----------------------------------------------------
-	// Update chainActive & related variables.
-	chainActive.SetTip(pindexNew);
-	UpdateTip(pindexNew, chainparams);
+    // Update chainActive & related variables.
+    chainActive.SetTip(pindexNew);
+    UpdateTip(pindexNew, chainparams);
 
-	int64_t nTime6 = GetTimeMicros();
-	nTimePostConnect += nTime6 - nTime5;
-	nTimeTotal += nTime6 - nTime1;
-	LogPrint(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime5) * MILLI, nTimePostConnect * MICRO, nTimePostConnect * MILLI / nBlocksTotal);
-	LogPrint(BCLog::BENCH, "- Connect block: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime1) * MILLI, nTimeTotal * MICRO, nTimeTotal * MILLI / nBlocksTotal);
+    int64_t nTime6 = GetTimeMicros();
+    nTimePostConnect += nTime6 - nTime5;
+    nTimeTotal += nTime6 - nTime1;
+    LogPrint(BCLog::BENCH, "  - Connect postprocess: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime5) * MILLI, nTimePostConnect * MICRO, nTimePostConnect * MILLI / nBlocksTotal);
+    LogPrint(BCLog::BENCH, "- Connect block: %.2fms [%.2fs (%.2fms/blk)]\n", (nTime6 - nTime1) * MILLI, nTimeTotal * MICRO, nTimeTotal * MILLI / nBlocksTotal);
 
-	uint256 _block_hash = blockConnecting.GetHash();
-	std::string _block_hash_str = _block_hash.GetHex();
+    uint256 _block_hash = blockConnecting.GetHash();
+    std::string _block_hash_str = _block_hash.GetHex();
 
-	// Compute messages for sending by WebSocket
-	if (WSConnections.size() > 0) {
-		//std::thread server_thread(&NotifyWSClients, blockConnecting);
-		//server_thread.detach();
-		NotifyWSClients(blockConnecting, pindexNew);
-	}
-	//-----------------------------------------------------
-	LogPrintf("+++ Block connected to chain: %d BH:%s\n", pindexNew->nHeight, pindexNew->GetBlockHash().GetHex());
-    //-----------------------------------------------------
-	connectTrace.BlockConnected(pindexNew, std::move(pthisBlock));
-	return true;
+    // Compute messages for sending by WebSocket
+    if (WSConnections.size() > 0) {
+        //std::thread server_thread(&NotifyWSClients, blockConnecting);
+        //server_thread.detach();
+        NotifyWSClients(blockConnecting, pindexNew);
+    }
+
+    connectTrace.BlockConnected(pindexNew, std::move(pthisBlock));
+
+    LogPrintf("+++ Block connected to chain: %d BH:%s\n", pindexNew->nHeight, pindexNew->GetBlockHash().GetHex());
+
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("block", pindexNew->nHeight);
+    payload.pushKV("hash", pindexNew->GetBlockHash().GetHex());
+    g_benchmark->End(benchBegin, "fnc_CChainState::ConnectTip", payload.write());
+
+    return true;
 }
 
 typedef std::map<std::string, std::string> custom_fields;
 
 void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
 {
-	// <address, [messages]>
-	std::map<std::string, std::vector<UniValue>> messages;
-	uint256 _block_hash = block.GetHash();
-	int sharesCnt = 0;
-	std::map<std::string,int> sharesCntLang;
-	std::string txidpocketnet = "";
-	std::string addrespocketnet = "PEj7QNjKdDPqE9kMDRboKoCtp8V6vZeZPd";
+    auto benchBegin = g_benchmark->Begin();
 
-	for (const auto& tx : block.vtx) {
-		// std::vector<std::pair<std::string, std::pair<int,int64_t>>> addrs;
-        std::map<std::string, std::pair<int,int64_t>> addrs;
+    // <address, [messages]>
+    std::map<std::string, std::vector<UniValue>> messages;
+    uint256 _block_hash = block.GetHash();
+    int sharesCnt = 0;
+    std::map<std::string, int> sharesCntLang;
+    std::string txidpocketnet = "";
+    std::string addrespocketnet = "PEj7QNjKdDPqE9kMDRboKoCtp8V6vZeZPd";
+
+    for (const auto& tx : block.vtx) {
+        // std::vector<std::pair<std::string, std::pair<int,int64_t>>> addrs;
+        std::map<std::string, std::pair<int, int64_t>> addrs;
         int64_t txtime = tx->nTime;
-		std::string txid = tx->GetHash().GetHex();
-		std::string optype = "";
+        std::string txid = tx->GetHash().GetHex();
+        std::string optype = "";
 
-		// Get all addresses from tx outs and check OP_RETURN
-		for (int i = 0; i < tx->vout.size(); i++) {
-			const CTxOut& txout = tx->vout[i];
-			//-------------------------
-			if (txout.scriptPubKey[0] == OP_RETURN) {
-				std::string asmstr = ScriptToAsmStr(txout.scriptPubKey);
-				std::vector<std::string> spl;
-				boost::split(spl, asmstr, boost::is_any_of("\t "));
-				if (spl.size() >= 3) {
-					if (spl[1] == OR_POST) {
-						optype = "share";
-						sharesCnt += 1;
+        // Get all addresses from tx outs and check OP_RETURN
+        for (unsigned long i = 0; i < tx->vout.size(); i++) {
+            const CTxOut& txout = tx->vout[i];
+            //-------------------------
+            if (txout.scriptPubKey[0] == OP_RETURN) {
+                std::string asmstr = ScriptToAsmStr(txout.scriptPubKey);
+                std::vector<std::string> spl;
+                boost::split(spl, asmstr, boost::is_any_of("\t "));
+                if (spl.size() >= 3) {
+                    if (spl[1] == OR_POST) {
+                        optype = "share";
+                        sharesCnt += 1;
 
-						reindexer::Item shr_itm;
-						if (g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, txid), shr_itm).ok()) {
-							std::string lang = shr_itm["lang"].As<string>();
-							std::map<std::string, int>::iterator itl = sharesCntLang.find(lang);
-							if (itl != sharesCntLang.end())
-								itl->second += 1;
-							else
-								sharesCntLang.emplace(lang,1);
-						}
-					}
-					// else if (spl[1] == OR_POSTEDIT)
-					// 	optype = "shareEdit";
-					else if (spl[1] == OR_SCORE)
-						optype = "upvoteShare";
-					else if (spl[1] == OR_SUBSCRIBE)
-						optype = "subscribe";
-					else if (spl[1] == OR_SUBSCRIBEPRIVATE)
-						optype = "subscribePrivate";
-					else if (spl[1] == OR_USERINFO)
-						optype = "userInfo";
-					else if (spl[1] == OR_UNSUBSCRIBE)
-						optype = "unsubscribe";
-					else if (spl[1] == OR_COMMENT_SCORE)
-						optype = "cScore";
+                        reindexer::Item shr_itm;
+                        if (g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, txid), shr_itm).ok()) {
+                            std::string lang = shr_itm["lang"].As<string>();
+                            std::map<std::string, int>::iterator itl = sharesCntLang.find(lang);
+                            if (itl != sharesCntLang.end())
+                                itl->second += 1;
+                            else
+                                sharesCntLang.emplace(lang, 1);
+                        }
+                    }
+                    // else if (spl[1] == OR_POSTEDIT)
+                    // 	optype = "shareEdit";
+                    else if (spl[1] == OR_SCORE)
+                        optype = "upvoteShare";
+                    else if (spl[1] == OR_SUBSCRIBE)
+                        optype = "subscribe";
+                    else if (spl[1] == OR_SUBSCRIBEPRIVATE)
+                        optype = "subscribePrivate";
+                    else if (spl[1] == OR_USERINFO)
+                        optype = "userInfo";
+                    else if (spl[1] == OR_UNSUBSCRIBE)
+                        optype = "unsubscribe";
+                    else if (spl[1] == OR_COMMENT_SCORE)
+                        optype = "cScore";
                     else if (spl[1] == OR_COMMENT)
-						optype = "comment";
+                        optype = "comment";
                     else if (spl[1] == OR_COMMENT_EDIT)
-						optype = "commentEdit";
+                        optype = "commentEdit";
                     else if (spl[1] == OR_COMMENT_DELETE)
-						optype = "commentDelete";
-				}
-			}
-			//-------------------------
-			CTxDestination destAddress;
-			bool fValidAddress = ExtractDestination(txout.scriptPubKey, destAddress);
-			if (fValidAddress) {
-				std::string encoded_address = EncodeDestination(destAddress);
+                        optype = "commentDelete";
+                }
+            }
+            //-------------------------
+            CTxDestination destAddress;
+            bool fValidAddress = ExtractDestination(txout.scriptPubKey, destAddress);
+            if (fValidAddress) {
+                std::string encoded_address = EncodeDestination(destAddress);
                 if (addrs.find(encoded_address) == addrs.end())
                     addrs.emplace(encoded_address, std::make_pair(i, (int64_t)txout.nValue));
-			}
-		}
+            }
+        }
 
-		for (auto const& addr : addrs) {
-
-			// Event for new transaction
-            custom_fields cTrFields {
-                { "nout", std::to_string(addr.second.first) },
-                { "amount", std::to_string(addr.second.second) },
+        for (auto const& addr : addrs) {
+            // Event for new transaction
+            custom_fields cTrFields{
+                {"nout", std::to_string(addr.second.first)},
+                {"amount", std::to_string(addr.second.second)},
             };
 
             if (optype != "") cTrFields.emplace("type", optype);
@@ -2832,32 +2844,27 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                     PrepareWSMessage(messages, "event", _itm["address"].As<string>(), txid, txtime, cFields);
                 }
 
-            }
-            else if (optype != "share")
-            {
+            } else if (optype != "share") {
                 if (optype == "userInfo") {
                     reindexer::Item _user_itm;
                     if (g_pocketdb->SelectOne(reindexer::Query("UsersView").Where("txid", CondEq, txid), _user_itm).ok()) {
                         if (_user_itm["time"].As<int64_t>() == _user_itm["regdate"].As<int64_t>()) {
                             if (_user_itm["referrer"].As<string>() != "") {
-                            
-                                custom_fields cFields {
-                                    { "mesType", optype },
-                                    { "addrFrom", addr.first }
-                                };
-                                
+                                custom_fields cFields{
+                                    {"mesType", optype},
+                                    {"addrFrom", addr.first}};
+
                                 PrepareWSMessage(messages, "event", _user_itm["referrer"].As<string>(), txid, txtime, cFields);
                             }
                         }
                     }
-                }
-                else if (optype == "upvoteShare") {
+                } else if (optype == "upvoteShare") {
                     reindexer::QueryResults queryResS;
                     reindexer::QueryResults queryResP;
 
                     reindexer::Error errS = g_pocketdb->DB()->Select(
                         reindexer::Query("Scores", 0, 1)
-                        .Where("txid", CondEq, txid),
+                            .Where("txid", CondEq, txid),
                         queryResS);
 
                     if (errS.ok() && queryResS.Count() > 0) {
@@ -2871,69 +2878,63 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                         if (errP.ok() && queryResP.Count() > 0) {
                             reindexer::Item itmP(queryResP[0].GetItem());
 
-                            custom_fields cFields {
-                                { "mesType", optype },
-                                { "addrFrom", addr.first },
-                                { "posttxid", itmS["posttxid"].As<string>() },
-                                { "upvoteVal", itmS["value"].As<string>() }
-                            };
+                            custom_fields cFields{
+                                {"mesType", optype},
+                                {"addrFrom", addr.first},
+                                {"posttxid", itmS["posttxid"].As<string>()},
+                                {"upvoteVal", itmS["value"].As<string>()}};
 
                             PrepareWSMessage(messages, "event", itmP["address"].As<string>(), txid, txtime, cFields);
                         }
                     }
-                }
-                else if (optype == "subscribe" || optype == "subscribePrivate" || optype == "unsubscribe") {
+                } else if (optype == "subscribe" || optype == "subscribePrivate" || optype == "unsubscribe") {
                     reindexer::QueryResults queryRes;
 
                     reindexer::Error err = g_pocketdb->DB()->Select(
                         reindexer::Query("Subscribes", 0, 1)
-                        .Where("txid", CondEq, txid),
+                            .Where("txid", CondEq, txid),
                         queryRes);
 
                     if (err.ok() && queryRes.Count() > 0) {
                         reindexer::Item itm(queryRes[0].GetItem());
 
-                        custom_fields cFields {
-                            { "mesType", optype },
-                            { "addrFrom", addr.first },
+                        custom_fields cFields{
+                            {"mesType", optype},
+                            {"addrFrom", addr.first},
                         };
 
                         PrepareWSMessage(messages, "event", itm["address_to"].As<string>(), txid, txtime, cFields);
                     }
-                }
-                else if (optype == "cScore") {
+                } else if (optype == "cScore") {
                     reindexer::QueryResults queryResS;
                     reindexer::QueryResults queryResP;
 
                     reindexer::Error errS = g_pocketdb->DB()->Select(
                         reindexer::Query("CommentScores", 0, 1)
-                        .Where("txid", CondEq, txid),
+                            .Where("txid", CondEq, txid),
                         queryResS);
 
                     if (errS.ok() && queryResS.Count() > 0) {
                         reindexer::Item itmS(queryResS[0].GetItem());
                         reindexer::Error errP = g_pocketdb->DB()->Select(
                             reindexer::Query("Comment", 0, 1)
-                            .Where("otxid", CondEq, itmS["commentid"].As<string>())
-                            .Where("last", CondEq, true),
+                                .Where("otxid", CondEq, itmS["commentid"].As<string>())
+                                .Where("last", CondEq, true),
                             queryResP);
 
                         if (errP.ok() && queryResP.Count() > 0) {
                             reindexer::Item itmP(queryResP[0].GetItem());
 
-                            custom_fields cFields {
-                                { "mesType", optype },
-                                { "addrFrom", addr.first },
-                                { "commentid", itmS["commentid"].As<string>() },
-                                { "upvoteVal", itmS["value"].As<string>() }
-                            };
+                            custom_fields cFields{
+                                {"mesType", optype},
+                                {"addrFrom", addr.first},
+                                {"commentid", itmS["commentid"].As<string>()},
+                                {"upvoteVal", itmS["value"].As<string>()}};
 
                             PrepareWSMessage(messages, "event", itmP["address"].As<string>(), txid, txtime, cFields);
                         }
                     }
-                }
-                else if (optype == "comment" || optype == "commentEdit" || optype == "commentDelete") {
-    
+                } else if (optype == "comment" || optype == "commentEdit" || optype == "commentDelete") {
                     reindexer::QueryResults queryResS;
                     reindexer::Error errS = g_pocketdb->DB()->Select(
                         reindexer::Query("Comment", 0, 1)
@@ -2954,13 +2955,13 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                             if (errP.ok() && queryResP.Count() > 0) {
                                 reindexer::Item itmP(queryResP[0].GetItem());
 
-                                custom_fields cFields {
-                                    { "mesType", optype },
-                                    { "addrFrom", addr.first },
-                                    { "posttxid", itmS["postid"].As<string>() },
-                                    { "parentid", itmS["parentid"].As<string>() },
-                                    { "answerid", itmS["answerid"].As<string>() },
-                                    { "reason", "post" },
+                                custom_fields cFields{
+                                    {"mesType", optype},
+                                    {"addrFrom", addr.first},
+                                    {"posttxid", itmS["postid"].As<string>()},
+                                    {"parentid", itmS["parentid"].As<string>()},
+                                    {"answerid", itmS["answerid"].As<string>()},
+                                    {"reason", "post"},
                                 };
 
                                 PrepareWSMessage(messages, "event", itmP["address"].As<string>(), itmS["otxid"].As<string>(), txtime, cFields);
@@ -2978,14 +2979,14 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
 
                             if (errP.ok() && queryResP.Count() > 0) {
                                 reindexer::Item itmP(queryResP[0].GetItem());
-                                
-                                custom_fields cFields {
-                                    { "mesType", optype },
-                                    { "addrFrom", addr.first },
-                                    { "posttxid", itmS["postid"].As<string>() },
-                                    { "parentid", itmS["parentid"].As<string>() },
-                                    { "answerid", itmS["answerid"].As<string>() },
-                                    { "reason", "answer" },
+
+                                custom_fields cFields{
+                                    {"mesType", optype},
+                                    {"addrFrom", addr.first},
+                                    {"posttxid", itmS["postid"].As<string>()},
+                                    {"parentid", itmS["parentid"].As<string>()},
+                                    {"answerid", itmS["answerid"].As<string>()},
+                                    {"reason", "answer"},
                                 };
 
                                 PrepareWSMessage(messages, "event", itmP["address"].As<string>(), itmS["otxid"].As<string>(), txtime, cFields);
@@ -2994,47 +2995,48 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                     }
                 }
             }
-		}
-	}
-
-	// Send all WS clients messages
-	UniValue sharesLang(UniValue::VOBJ);
-    for (std::map<std::string, int>::iterator itl = sharesCntLang.begin(); itl != sharesCntLang.end(); ++itl) {
-		sharesLang.pushKV(itl->first, itl->second);
+        }
     }
-	for (auto& connWS : WSConnections) {
-		UniValue msg(UniValue::VOBJ);
-		msg.pushKV("addr", connWS.second.Address);
-		msg.pushKV("msg", "new block");
-		msg.pushKV("blockhash", _block_hash.GetHex());
-		msg.pushKV("time", std::to_string(block.nTime));
-		msg.pushKV("height", blockIndex->nHeight);
-		msg.pushKV("shares", sharesCnt);
-		msg.pushKV("sharesLang", sharesLang);
 
-		reindexer::QueryResults queryResSubscribes;
-		reindexer::Error err = g_pocketdb->DB()->Select(
-			reindexer::Query("SubscribesView")
-			.Where("address", CondEq, connWS.second.Address),
-			queryResSubscribes);
+    // Send all WS clients messages
+    UniValue sharesLang(UniValue::VOBJ);
+    for (std::map<std::string, int>::iterator itl = sharesCntLang.begin(); itl != sharesCntLang.end(); ++itl) {
+        sharesLang.pushKV(itl->first, itl->second);
+    }
 
-		if (err.ok() && queryResSubscribes.Count() > 0) {
-			std::vector<string> _addrs;
-			for (auto it : queryResSubscribes) {
-				reindexer::Item itm(it.GetItem());
-				_addrs.push_back(itm["address_to"].As<string>());
-			}
+    for (auto& connWS : WSConnections) {
+        UniValue msg(UniValue::VOBJ);
+        msg.pushKV("addr", connWS.second.Address);
+        msg.pushKV("msg", "new block");
+        msg.pushKV("blockhash", _block_hash.GetHex());
+        msg.pushKV("time", std::to_string(block.nTime));
+        msg.pushKV("height", blockIndex->nHeight);
+        msg.pushKV("shares", sharesCnt);
+        msg.pushKV("sharesLang", sharesLang);
 
-			reindexer::QueryResults queryResShares;
-			reindexer::Error err = g_pocketdb->DB()->Select(
-				reindexer::Query("Posts")
-				.Where("block", CondEq, blockIndex->nHeight)
-				.Where("address", CondSet, _addrs),
-				queryResShares);
-			if (err.ok() && queryResShares.Count() > 0) {
-				msg.pushKV("sharesSubscr", (int)queryResShares.Count());
-			}
-		}
+        reindexer::QueryResults queryResSubscribes;
+        reindexer::Error err = g_pocketdb->DB()->Select(
+            reindexer::Query("SubscribesView")
+                .Where("address", CondEq, connWS.second.Address),
+            queryResSubscribes);
+
+        if (err.ok() && queryResSubscribes.Count() > 0) {
+            std::vector<string> _addrs;
+            for (auto it : queryResSubscribes) {
+                reindexer::Item itm(it.GetItem());
+                _addrs.push_back(itm["address_to"].As<string>());
+            }
+
+            reindexer::QueryResults queryResShares;
+            err = g_pocketdb->DB()->Select(
+                reindexer::Query("Posts")
+                    .Where("block", CondEq, blockIndex->nHeight)
+                    .Where("address", CondSet, _addrs),
+                queryResShares);
+            if (err.ok() && queryResShares.Count() > 0) {
+                msg.pushKV("sharesSubscr", (int)queryResShares.Count());
+            }
+        }
 
         if (blockIndex->nHeight > connWS.second.Block) {
             try {
@@ -3043,7 +3045,7 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                 LogPrintf("Error: CChainState::NotifyWSClients (1) - %s\n", e.what());
             }
 
-			if (txidpocketnet != "") {
+            if (txidpocketnet != "") {
                 try {
                     UniValue m(UniValue::VOBJ);
                     m.pushKV("msg", "sharepocketnet");
@@ -3059,8 +3061,7 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                 for (auto m : messages[connWS.second.Address]) {
                     try {
                         connWS.second.Connection->send(m.write(), [](const SimpleWeb::error_code& ec) {});
-                    }
-                    catch (const std::exception& e) {
+                    } catch (const std::exception& e) {
                         LogPrintf("Error: CChainState::NotifyWSClients (2) - %s\n", e.what());
                     }
                 }
@@ -3068,13 +3069,13 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
 
             connWS.second.Block = blockIndex->nHeight;
         }
-	}
+    }
+
+    g_benchmark->End(benchBegin, "fnc_CChainState::NotifyWSClients", "{}");
 }
 
-void CChainState::PrepareWSMessage(std::map<std::string, std::vector<UniValue>>& messages, std::string msg_type, std::string addrTo,
-    std::string txid, int64_t txtime, custom_fields cFields)
+void CChainState::PrepareWSMessage(std::map<std::string, std::vector<UniValue>>& messages, std::string msg_type, std::string addrTo, std::string txid, int64_t txtime, custom_fields cFields)
 {
-
     UniValue msg(UniValue::VOBJ);
     msg.pushKV("addr", addrTo);
     msg.pushKV("msg", msg_type);
@@ -3721,64 +3722,63 @@ static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state,
 
 bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW, bool fCheckMerkleRoot, bool fCheckSig)
 {
-	// These are checks that are independent of context.
+    // These are checks that are independent of context.
+    if (block.fChecked)
+        return true;
 
-	if (block.fChecked)
-		return true;
+    // Check that the header is valid (particularly PoW).  This is mostly
+    // redundant with the call in AcceptBlockHeader.
+    if (block.IsProofOfWork()) {
+        if (!CheckBlockHeader(block, state, consensusParams, fCheckPOW)) {
+            return false;
+        }
+    }
 
-	// Check that the header is valid (particularly PoW).  This is mostly
-	// redundant with the call in AcceptBlockHeader.
-	if (block.IsProofOfWork()) {
-		if (!CheckBlockHeader(block, state, consensusParams, fCheckPOW)) {
-			return false;
-		}
-	}
+    // Check the merkle root.
+    if (fCheckMerkleRoot) {
+        bool mutated;
+        uint256 hashMerkleRoot2 = BlockMerkleRoot(block, &mutated);
+        if (block.hashMerkleRoot != hashMerkleRoot2)
+            return state.DoS(100, false, REJECT_INVALID, "bad-txnmrklroot", true, "hashMerkleRoot mismatch");
 
-	// Check the merkle root.
-	if (fCheckMerkleRoot) {
-		bool mutated;
-		uint256 hashMerkleRoot2 = BlockMerkleRoot(block, &mutated);
-		if (block.hashMerkleRoot != hashMerkleRoot2)
-			return state.DoS(100, false, REJECT_INVALID, "bad-txnmrklroot", true, "hashMerkleRoot mismatch");
+        // Check for merkle tree malleability (CVE-2012-2459): repeating sequences
+        // of transactions in a block without affecting the merkle root of a block,
+        // while still invalidating it.
+        if (mutated)
+            return state.DoS(100, false, REJECT_INVALID, "bad-txns-duplicate", true, "duplicate transaction");
+    }
 
-		// Check for merkle tree malleability (CVE-2012-2459): repeating sequences
-		// of transactions in a block without affecting the merkle root of a block,
-		// while still invalidating it.
-		if (mutated)
-			return state.DoS(100, false, REJECT_INVALID, "bad-txns-duplicate", true, "duplicate transaction");
-	}
+    if (block.IsProofOfStake()) {
+        // Second transaction must be coinstake, the rest must not be
+        if (block.vtx.empty() || !block.vtx[1]->IsCoinStake())
+            return state.DoS(100, error("CheckBlock() : second tx is not coinstake"));
+        for (unsigned int i = 2; i < block.vtx.size(); i++)
+            if (block.vtx[i]->IsCoinStake())
+                return state.DoS(100, error("CheckBlock() : more than one coinstake"));
+    }
 
-	if (block.IsProofOfStake()) {
-		// Second transaction must be coinstake, the rest must not be
-		if (block.vtx.empty() || !block.vtx[1]->IsCoinStake())
-			return state.DoS(100, error("CheckBlock() : second tx is not coinstake"));
-		for (unsigned int i = 2; i < block.vtx.size(); i++)
-			if (block.vtx[i]->IsCoinStake())
-				return state.DoS(100, error("CheckBlock() : more than one coinstake"));
-	}
+    // All potential-corruption validation must be done before we do any
+    // transaction validation, as otherwise we may mark the header as invalid
+    // because we receive the wrong transactions for it.
+    // Note that witness malleability is checked in ContextualCheckBlock, so no
+    // checks that use witness data may be performed here.
 
-	// All potential-corruption validation must be done before we do any
-	// transaction validation, as otherwise we may mark the header as invalid
-	// because we receive the wrong transactions for it.
-	// Note that witness malleability is checked in ContextualCheckBlock, so no
-	// checks that use witness data may be performed here.
+    // Size limits
+    if (block.vtx.empty() || block.vtx.size() * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT || ::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT)
+        return state.DoS(100, false, REJECT_INVALID, "bad-blk-length", false, "size limits failed");
 
-	// Size limits
-	if (block.vtx.empty() || block.vtx.size() * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT || ::GetSerializeSize(block, PROTOCOL_VERSION | SERIALIZE_TRANSACTION_NO_WITNESS) * WITNESS_SCALE_FACTOR > MAX_BLOCK_WEIGHT)
-		return state.DoS(100, false, REJECT_INVALID, "bad-blk-length", false, "size limits failed");
+    // First transaction must be coinbase, the rest must not be
+    if (block.vtx.empty() || !block.vtx[0]->IsCoinBase())
+        return state.DoS(100, false, REJECT_INVALID, "bad-cb-missing", false, "first tx is not coinbase");
+    for (unsigned int i = 1; i < block.vtx.size(); i++)
+        if (block.vtx[i]->IsCoinBase())
+            return state.DoS(100, false, REJECT_INVALID, "bad-cb-multiple", false, "more than one coinbase");
 
-	// First transaction must be coinbase, the rest must not be
-	if (block.vtx.empty() || !block.vtx[0]->IsCoinBase())
-		return state.DoS(100, false, REJECT_INVALID, "bad-cb-missing", false, "first tx is not coinbase");
-	for (unsigned int i = 1; i < block.vtx.size(); i++)
-		if (block.vtx[i]->IsCoinBase())
-			return state.DoS(100, false, REJECT_INVALID, "bad-cb-multiple", false, "more than one coinbase");
-
-	// Check proof-of-stake block signature
-	if (fCheckSig && !CheckBlockSignature(block)) {
-		//return error("CheckBlock() : bad proof-of-stake block signature");
-		return false;
-	}
+    // Check proof-of-stake block signature
+    if (fCheckSig && !CheckBlockSignature(block)) {
+        //return error("CheckBlock() : bad proof-of-stake block signature");
+        return false;
+    }
 
     // Read and parse received block data
     UniValue _txs_src(UniValue::VOBJ);
@@ -3787,25 +3787,25 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
         _txs_src.read(_pocket_data);
     }
 
-	// Check transactions
-	for (const auto& tx : block.vtx) {
-		if (!CheckTransaction(*tx, state, true)) {
-			return state.Invalid(false, state.GetRejectCode(), state.GetRejectReason(),
-				strprintf("Transaction check failed (tx hash %s) %s", tx->GetHash().ToString(), state.GetDebugMessage()));
-		}
-	}
+    // Check transactions
+    for (const auto& tx : block.vtx) {
+        if (!CheckTransaction(*tx, state, true)) {
+            return state.Invalid(false, state.GetRejectCode(), state.GetRejectReason(),
+                strprintf("Transaction check failed (tx hash %s) %s", tx->GetHash().ToString(), state.GetDebugMessage()));
+        }
+    }
 
-	unsigned int nSigOps = 0;
-	for (const auto& tx : block.vtx) {
-		nSigOps += GetLegacySigOpCount(*tx);
-	}
-	if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
-		return state.DoS(100, false, REJECT_INVALID, "bad-blk-sigops", false, "out-of-bounds SigOpCount");
+    unsigned int nSigOps = 0;
+    for (const auto& tx : block.vtx) {
+        nSigOps += GetLegacySigOpCount(*tx);
+    }
+    if (nSigOps * WITNESS_SCALE_FACTOR > MAX_BLOCK_SIGOPS_COST)
+        return state.DoS(100, false, REJECT_INVALID, "bad-blk-sigops", false, "out-of-bounds SigOpCount");
 
-	if (fCheckPOW && fCheckMerkleRoot)
-		block.fChecked = true;
+    if (fCheckPOW && fCheckMerkleRoot)
+        block.fChecked = true;
 
-	return true;
+    return true;
 }
 
 bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string ri_table, reindexer::Item& itm) {
@@ -3871,49 +3871,55 @@ bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string
     return false;
 }
 
-bool CheckBlockAdditional(CBlockIndex* pindex, const CBlock& block, CValidationState& state) {
-	// We need check POCKETNET_DATA array or mempool or general RI tables
-	// for check antibot, consistent block and reindexer db and op_return of transactions
-	{
-		uint256 blockhash = block.GetHash();
+bool CheckBlockAdditional(CBlockIndex* pindex, const CBlock& block, CValidationState& state)
+{
+    auto benchBegin = g_benchmark->Begin();
 
-        // TODO (brangr): enable this check
-        // Before check this block need check valid Reindexer DB
-        // if (pindex->nHeight > Params().GetConsensus().nHeight_version_1_0_0 && !g_addrindex->CheckRHash(block, pindex->pprev)) {
-            // LogPrintf("WARNING!!! Received block not consistent with ReindexerDB (%s)\n", blockhash.GetHex());
-            //return state.DoS(200, error("Received block not consistent with ReindexerDB (%s)", blockhash.GetHex()), REJECT_INVALID, "bad-rhash");
-        // }
+    // We need check POCKETNET_DATA array or mempool or general RI tables
+    // for check antibot, consistent block and reindexer db and op_return of transactions
+    uint256 blockhash = block.GetHash();
 
-		// Read and parse received block data
-        UniValue _txs_src(UniValue::VOBJ);
-		if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
-			std::string _pocket_data = POCKETNET_DATA[blockhash];
-			_txs_src.read(_pocket_data);
-		}
+    // TODO (brangr): enable this check
+    // Before check this block need check valid Reindexer DB
+    // if (pindex->nHeight > Params().GetConsensus().nHeight_version_1_0_0 && !g_addrindex->CheckRHash(block, pindex->pprev)) {
+    // LogPrintf("WARNING!!! Received block not consistent with ReindexerDB (%s)\n", blockhash.GetHex());
+    //return state.DoS(200, error("Received block not consistent with ReindexerDB (%s)", blockhash.GetHex()), REJECT_INVALID, "bad-rhash");
+    // }
 
-        // TODO (brangr): change UniValue to RTransaction
-        BlockVTX blockVtx;
-
-		// Loop transaction and checks
-		for (const CTransactionRef& tx : block.vtx) {
-            std::string ri_table;
-            if (!g_addrindex->GetPocketnetTXType(tx, ri_table)) continue;
-
-            reindexer::Item itm;
-			if (!FindRTransaction(_txs_src, tx, ri_table, itm)) {
-                return state.DoS(200, error("Failed find reindexer transaction part (%s)", tx->GetHash().GetHex()), REJECT_INCOMPLETE, "failed-find-rtransaction", false, "", true);
-            }
-
-            blockVtx.Add(ri_table, g_addrindex->GetUniValue(tx, itm, ri_table));
-		}
-
-        if (!g_antibot->CheckBlock(blockVtx, pindex->nHeight)) {
-            if (!IsCheckpointBlock(pindex->nHeight, blockhash.GetHex()))
-                return state.Invalid(false, REJECT_INVALID, "bad-antibot-checking", strprintf("Block check with the AntiBot failed (%s)", blockhash.GetHex()));
-        }
+    // Read and parse received block data
+    UniValue _txs_src(UniValue::VOBJ);
+    if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
+        std::string _pocket_data = POCKETNET_DATA[blockhash];
+        _txs_src.read(_pocket_data);
     }
 
-	return true;
+    // TODO (brangr): change UniValue to RTransaction
+    BlockVTX blockVtx;
+
+    // Loop transaction and checks
+    for (const CTransactionRef& tx : block.vtx) {
+        std::string ri_table;
+        if (!g_addrindex->GetPocketnetTXType(tx, ri_table)) continue;
+
+        reindexer::Item itm;
+        if (!FindRTransaction(_txs_src, tx, ri_table, itm)) {
+            return state.DoS(200, error("Failed find reindexer transaction part (%s)", tx->GetHash().GetHex()), REJECT_INCOMPLETE, "failed-find-rtransaction", false, "", true);
+        }
+
+        blockVtx.Add(ri_table, g_addrindex->GetUniValue(tx, itm, ri_table));
+    }
+
+    if (!g_antibot->CheckBlock(blockVtx, pindex->nHeight)) {
+        if (!IsCheckpointBlock(pindex->nHeight, blockhash.GetHex()))
+            return state.Invalid(false, REJECT_INVALID, "bad-antibot-checking", strprintf("Block check with the AntiBot failed (%s)", blockhash.GetHex()));
+    }
+
+    UniValue payload(UniValue::VOBJ);
+    payload.pushKV("block", pindex->nHeight);
+    payload.pushKV("hash", pindex->GetBlockHash().GetHex());
+    g_benchmark->End(benchBegin, "fnc_CheckBlockAdditional", payload.write());
+
+    return true;
 }
 
 bool CheckBlockSignature(const CBlock& block)

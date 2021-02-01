@@ -60,7 +60,7 @@ void BCLog::Logger::EnableCategory(BCLog::LogFlags flag)
 bool BCLog::Logger::EnableCategory(const std::string& str)
 {
     BCLog::LogFlags flag;
-    if (!GetLogCategory(flag, str)) return false;
+    if (!GetLogCategory(str, flag)) return false;
     EnableCategory(flag);
     return true;
 }
@@ -73,7 +73,7 @@ void BCLog::Logger::DisableCategory(BCLog::LogFlags flag)
 bool BCLog::Logger::DisableCategory(const std::string& str)
 {
     BCLog::LogFlags flag;
-    if (!GetLogCategory(flag, str)) return false;
+    if (!GetLogCategory(str, flag)) return false;
     DisableCategory(flag);
     return true;
 }
@@ -124,7 +124,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::ALL, "all"},
 };
 
-bool GetLogCategory(BCLog::LogFlags& flag, const std::string& str)
+bool BCLog::Logger::GetLogCategory(const std::string& str, BCLog::LogFlags& flag)
 {
     if (str == "") {
         flag = BCLog::ALL;
@@ -154,7 +154,7 @@ std::string ListLogCategories()
     return ret;
 }
 
-std::vector<CLogCategoryActive> ListActiveLogCategories()
+std::vector<CLogCategoryActive> BCLog::Logger::ListActiveLogCategories()
 {
     std::vector<CLogCategoryActive> ret;
     for (const CLogCategoryDesc& category_desc : LogCategories) {

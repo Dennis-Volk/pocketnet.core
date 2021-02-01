@@ -20,18 +20,15 @@ using namespace std::chrono;
 
 class Benchmark {
 private:
-    Mutex cs;
-    int _id;
-    map<int, long long int> _checkpoints;
 
 public:
     Benchmark();
 
     ~Benchmark();
 
-    int Begin();
+    long long int Begin();
 
-    void End(int id, const string& checkpoint, const string& payload);
+    void End(long long int begin, const string& checkpoint, const string& payload);
 };
 
 extern std::unique_ptr<Benchmark> g_benchmark;

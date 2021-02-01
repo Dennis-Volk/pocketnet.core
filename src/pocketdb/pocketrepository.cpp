@@ -50,7 +50,6 @@ bool PocketRepository::Init(const string &table) {
              "  Checkpoint text not null,"
              "  Payload text not null"
              " );"
-             " truncate table Benchmark;"
         );
     }
 

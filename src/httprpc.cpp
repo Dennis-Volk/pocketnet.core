@@ -24,6 +24,8 @@
 #include <chrono>
 using namespace std::chrono;
 
+#include "pocketdb/benchmark.h"
+
 /** WWW-Authenticate to present with 401 Unauthorized response */
 static const char* WWW_AUTH_HEADER_DATA = "Basic realm=\"jsonrpc\"";
 
@@ -187,87 +189,20 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string&)
         std::string sMethd = "";
         UniValue valRequest;
 
-        // get method for chack auth needed
-        /*if (valRequest.read(req->ReadBody())) {
-            if (valRequest.isObject()) {
-                UniValue valMethod = find_value(valRequest, "method");
-                if (!valMethod.isNull() && valMethod.isStr())
-                    sMethd = valMethod.get_str();
-            }
-        } else {
-            throw JSONRPCError(RPC_PARSE_ERROR, "Parse error");
-        }*/
-        
         jreq.peerAddr = req->GetPeer().ToString();
-        //const CRPCCommand* pcmd = tableRPC[sMethd];
+        if (!RPCAuthorized(authHeader.second, jreq.authUser)) {
+            LogPrintf("ThreadRPCServer incorrect password attempt from %s\n", jreq.peerAddr);
 
-        //if (sMethd == "rpcstat" || (pcmd && pcmd->pwdRequied)) {
-            if (!RPCAuthorized(authHeader.second, jreq.authUser)) {
-                LogPrintf("ThreadRPCServer incorrect password attempt from %s\n", jreq.peerAddr);
+            /*  Deter brute-forcing
+                If this results in a DoS the user really
+                shouldn't have their RPC port exposed.
+            */
+            MilliSleep(250);
 
-                /*  Deter brute-forcing
-                    If this results in a DoS the user really
-                    shouldn't have their RPC port exposed.
-                */
-                MilliSleep(250);
-
-                req->WriteHeader("WWW-Authenticate", WWW_AUTH_HEADER_DATA);
-                req->WriteReply(HTTP_UNAUTHORIZED);
-                return false;
-            }
-        //}
-
-        // Build statistic object
-        /*
-        if (sMethd == "rpcstat" || StatLogCounter <= 0) {
-            UniValue statResult(UniValue::VOBJ);
-
-            for (auto& hData : StatisticData) {
-                UniValue hResult(UniValue::VOBJ);
-
-                // statistic level 0
-
-                // Count of calls
-                int64_t _cnt = std::accumulate(hData.second.begin(), hData.second.end(), 0, accumCountFunc);
-                hResult.pushKV("cnt", _cnt);
-
-                // Average time execute
-                int64_t _sum = std::accumulate(hData.second.begin(), hData.second.end(), 0, accumSumFunc);
-                hResult.pushKV("avg", _sum / _cnt);
-
-                // hResult.pushKV("min", 0);
-                // hResult.pushKV("max", 0);
-
-                hResult.pushKV("uniq", hData.second.size());
-
-                // statistic level 1
-                // if (jreq.params["level"].get_int() >= 1) {
-                //     // todo
-
-                //     if (jreq.params["level"].get_int() >= 2) {
-                //         // todo
-                //     }
-                // }
-
-                statResult.pushKV(std::to_string(hData.first), hResult);
-            }
-
-            std::string strReplyStat = JSONRPCReply(statResult, NullUniValue, jreq.id);
-            
-            if (StatLogCounter <= 0) {
-                StatLogCounter = 100;
-                LogPrintf("??? RPC Statistic: %s", strReplyStat);
-            }
-            
-            if (sMethd == "rpcstat") {
-                req->WriteHeader("Content-Type", "application/json");
-                req->WriteReply(HTTP_OK, strReplyStat);
-                return true;
-            }
+            req->WriteHeader("WWW-Authenticate", WWW_AUTH_HEADER_DATA);
+            req->WriteReply(HTTP_UNAUTHORIZED);
+            return false;
         }
-
-        StatLogCounter -= 1;
-        */
 
         if (!valRequest.read(req->ReadBody()))
             throw JSONRPCError(RPC_PARSE_ERROR, "Parse error");
@@ -280,46 +215,18 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string&)
         if (valRequest.isObject()) {
             jreq.parse(valRequest);
 
-            //LogPrint(BCLog::RPC, "RPC Method %s - %s\n", jreq.strMethod, valRequest.write());
-            auto start = system_clock::now();
+            // Fix benchmark record id
+            auto benchBegin = g_benchmark->Begin();
+
+            // Execute RPC method
             UniValue result = tableRPC.execute(jreq);
-            auto stop = system_clock::now();
-            auto duration = duration_cast<milliseconds>(stop - start);
-            LogPrint(BCLog::RPC, "RPC Method time %s (%s) - %ldms\n", jreq.strMethod, jreq.peerAddr, duration.count());
-/*
-            // Extend statistic data
-            if (gArgs.GetBoolArg("-rpcstat", false)) {
-                time_t tt = system_clock::to_time_t(start);
-                tm utc_tm = *gmtime(&tt);
 
-                int key = (utc_tm.tm_mday * 100) + utc_tm.tm_hour;
+            // Fix benchmark executed
+            UniValue payload(UniValue::VOBJ);
+            payload.pushKV("ip", jreq.peerAddr);
+            payload.pushKV("args", jreq.params);
+            g_benchmark->End(benchBegin, "rpc_" + jreq.strMethod, payload.write());
 
-                std::string ip = "";
-                std::vector<std::string> vIp;
-                boost::split(vIp, jreq.peerAddr, boost::is_any_of(":"));
-                if (vIp.size() > 0) ip = vIp[0];
-                
-                // new hour key
-                if (StatisticData.find(key) == StatisticData.end()) {
-                    std::map<std::string, std::vector<int64_t>> ipsData;
-                    StatisticData.insert(std::make_pair(key, ipsData));
-                }
-
-                // new IP key
-                if (StatisticData[key].find(ip) == StatisticData[key].end()) {
-                    std::vector<int64_t> ipTimes;
-                    StatisticData[key].insert(std::make_pair(ip, ipTimes));
-                }
-
-                StatisticData[key][ip].push_back(duration.count());
-
-                // Clear old data
-                while (StatisticData.size() > 24) {
-                    int remKey = StatisticData.begin()->first;
-                    StatisticData.erase(remKey);
-                }
-            }
-*/
             // Send reply
             strReply = JSONRPCReply(result, NullUniValue, jreq.id);
 

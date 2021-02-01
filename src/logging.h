@@ -105,7 +105,12 @@ namespace BCLog {
 
         bool WillLogCategory(LogFlags category) const;
 
+        /** Return true if str parses as a log category and set the flag */
+        bool GetLogCategory(const std::string& str, BCLog::LogFlags& flag);
         bool DefaultShrinkDebugFile() const;
+
+        /** Returns a vector of the active log categories. */
+        std::vector<CLogCategoryActive> ListActiveLogCategories();
     };
 
 } // namespace BCLog
@@ -120,12 +125,6 @@ static inline bool LogAcceptCategory(BCLog::LogFlags category)
 
 /** Returns a string with the log categories. */
 std::string ListLogCategories();
-
-/** Returns a vector of the active log categories. */
-std::vector<CLogCategoryActive> ListActiveLogCategories();
-
-/** Return true if str parses as a log category and set the flag */
-bool GetLogCategory(BCLog::LogFlags& flag, const std::string& str);
 
 // Be conservative when using LogPrintf/error or other things which
 // unconditionally log to debug.log! It should not be the case that an inbound

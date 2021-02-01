@@ -1375,20 +1375,20 @@ bool AppInitMain()
             return InitError(_("Unable to start HTTP server. See debug log for details."));
     }
 
-	// ********************************************************* Step 4.1: Start PocketDB
+    // ********************************************************* Step 4.1: Start PocketDB
     uiInterface.InitMessage(_("Loading Reindexer DB..."));
-	g_pocketdb = std::unique_ptr<PocketDB>();
+    g_pocketdb = std::unique_ptr<PocketDB>(new PocketDB());
     if (!g_pocketdb->Init()) {
         return InitError(_("Unable to start reindexer database."));
     }
 
     uiInterface.InitMessage(_("Loading Sqlite Pocket DB..."));
-    g_pocket_repository = std::unique_ptr<PocketRepository>();
+    g_pocket_repository = std::unique_ptr<PocketRepository>(new PocketRepository());
     if (!g_pocket_repository->Init()) {
         return InitError(_("Unable to connect sqlite database."));
     }
 
-    g_benchmark = std::unique_ptr<Benchmark>();
+    g_benchmark = std::unique_ptr<Benchmark>(new Benchmark());
 	// ********************************************************* Step 4.2: Start AddrIndex
 	g_addrindex = std::unique_ptr<AddrIndex>(new AddrIndex());
     gPruneRDB = gArgs.GetBoolArg("-prunerdb", false);
