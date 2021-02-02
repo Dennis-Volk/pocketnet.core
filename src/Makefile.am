@@ -863,7 +863,7 @@ pocketcoind_LDADD = \
   $(LIBMEMENV) \
   $(LIBSECP256K1)
 
-pocketcoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS)
+pocketcoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS)
 
 # pocketcoin-cli binary #
 pocketcoin_cli_SOURCES = pocketcoin-cli.cpp
