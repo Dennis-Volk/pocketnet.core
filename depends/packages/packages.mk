@@ -10,6 +10,7 @@ rapidcheck_packages = rapidcheck
 qt_darwin_packages=qt
 qt_mingw32_packages=qt
 
+sqlite_packages=sqlite
 wallet_packages=bdb
 
 upnp_packages=miniupnpc
