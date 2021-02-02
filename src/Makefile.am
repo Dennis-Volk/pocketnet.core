@@ -35,7 +35,6 @@ LIBPOCKETCOIN_CRYPTO_BASE=crypto/libpocketcoin_crypto_base.a
 LIBPOCKETCOINQT=qt/libpocketcoinqt.a
 LIBSECP256K1=secp256k1/libsecp256k1.la
 LIBREINDEXER=libreindexer.a
-SQLITE_LIBS=liblibsqlite3.a
 
 if ENABLE_ZMQ
 LIBPOCKETCOIN_ZMQ=libpocketcoin_zmq.a
@@ -864,13 +863,13 @@ pocketcoind_LDADD = \
   $(LIBMEMENV) \
   $(LIBSECP256K1)
 
-pocketcoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(SQLITE_LIBS)
+pocketcoind_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS)
 
 # pocketcoin-cli binary #
 pocketcoin_cli_SOURCES = pocketcoin-cli.cpp
 pocketcoin_cli_CPPFLAGS = $(AM_CPPFLAGS) $(POCKETCOIN_INCLUDES) $(EVENT_CFLAGS)
 pocketcoin_cli_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-pocketcoin_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
+pocketcoin_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -lsqlite3
 
 if TARGET_WINDOWS
 pocketcoin_cli_SOURCES += pocketcoin-cli-res.rc
