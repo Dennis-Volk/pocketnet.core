@@ -846,19 +846,6 @@ static UniValue getblock(const JSONRPCRequest& request)
     return blockToJSON(block, pblockindex, verbosity >= 2);
 }
 
-static UniValue getcompactblock(CBlockIndex* pindex) {
-	UniValue oblock(UniValue::VOBJ);
-	CBlock block = GetBlockChecked(pindex);
-
-	oblock.pushKV("height", pindex->nHeight);
-	oblock.pushKV("hash", pindex->GetBlockHash().GetHex());
-	oblock.pushKV("time", (int64_t)pindex->nTime);
-	oblock.pushKV("size", (int)::GetSerializeSize(block, PROTOCOL_VERSION));
-	oblock.pushKV("ntx", (int)pindex->nTx);
-
-	return oblock;
-}
-
 static UniValue getlastblocks(const JSONRPCRequest& request) {
     if (request.fHelp || request.params.size() < 1)
         throw std::runtime_error(
@@ -947,9 +934,14 @@ static UniValue getlastblocks(const JSONRPCRequest& request) {
 
 	CBlockIndex* pindex = chainActive[last_height];
 	while (pindex && count > 0) {
-        UniValue ublock = getcompactblock(pindex);
-        UniValue types(UniValue::VOBJ);
+        UniValue ublock(UniValue::VOBJ);
 
+        ublock.pushKV("height", pindex->nHeight);
+        ublock.pushKV("hash", pindex->GetBlockHash().GetHex());
+        ublock.pushKV("time", (int64_t)pindex->nTime);
+        ublock.pushKV("ntx", (int)pindex->nTx);
+
+        UniValue types(UniValue::VOBJ);
         if (verbose) {
             for (auto s: rStat) {
                 auto f = s.second.find(pindex->nHeight);
