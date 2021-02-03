@@ -45,6 +45,7 @@
 
 #include <future>
 
+#include <boost/thread/thread.hpp>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <univalue.h>
