@@ -2213,26 +2213,29 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
 
     //----------------------------------------------------------------------------------
-    // Check reindexer data exists and Antibot checks
-    if (!CheckBlockAdditional(pindex, block, state)) {
-        return false;
+    uint256 blockhash = block.GetHash();
+    std::vector<auto> pocketData;
+
+    // Get pocket data from memory cache
+    if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
+        std::string pocketDataSource = POCKETNET_DATA[blockhash];
+        POCKETNET_DATA.erase(blockhash);
     }
+
+    // Check reindexer data exists and Antibot checks
+    // TODO (brangr): FOR SQL WRITING LOGIC
+    //    if (!CheckBlockAdditional(pindex, block, state)) {
+    //        return false;
+    //    }
 
     // Try write reindexer data
     // Data can received by another node or this node created new block
     // and data in mempool
     {
-        uint256 blockhash = block.GetHash();
-
-        // Write received PocketNET data to RIDB
-        if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
-            std::string _pocket_data = POCKETNET_DATA[blockhash];
-            if (!g_addrindex->SetBlockRIData(_pocket_data, pindex->nHeight)) {
-                LogPrintf("--- Failed restore received data (%s) (AddrIndex::SetBlockRIData)\n", blockhash.GetHex());
-                return false;
-            }
-
-            POCKETNET_DATA.erase(blockhash);
+        // Write received Pocket data to Sqlite DB
+        if (!g_addrindex->SetBlockData(pocketData, pindex->nHeight)) {
+            LogPrintf("--- Failed restore received data (%s) (AddrIndex::SetBlockRIData)\n", blockhash.GetHex());
+            return false;
         }
 
         // Get data from RIMempool and write to general RI tables

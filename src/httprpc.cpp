@@ -72,14 +72,6 @@ static std::string strRPCUserColonPass;
 /* Stored RPC timer interface (for unregistration) */
 static std::unique_ptr<HTTPRPCTimerInterface> httpRPCTimerInterface;
 
-std::map<
-    int, // Hour
-    std::map<
-        std::string, // IP
-        std::vector<int64_t> // Time executed request
-    >
-> StatisticData;
-
 static void JSONErrorReply(HTTPRequest* req, const UniValue& objError, const UniValue& id)
 {
     // Send error reply from json-rpc error object
@@ -158,15 +150,6 @@ static bool RPCAuthorized(const std::string& strAuth, std::string& strAuthUserna
     return multiUserAuthorized(strUserPass);
 }
 
-static auto accumCountFunc = [](int64_t cnt, const std::pair<std::string, std::vector<int64_t>>& rhs) {
-    return cnt + rhs.second.size();
-};
-
-static auto accumSumFunc = [](int64_t sum, const std::pair<std::string, std::vector<int64_t>>& rhs) {
-    return sum + std::accumulate(rhs.second.begin(), rhs.second.end(), (int64_t)0);
-};
-
-static int StatLogCounter = 100;
 static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string&)
 {
     // JSONRPC handles only POST

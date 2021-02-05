@@ -1222,8 +1222,6 @@ void AntiBot::CheckTransactionRIItem(UniValue oitm, int height, ANTIBOTRESULT& r
 
 void AntiBot::CheckTransactionRIItem(UniValue oitm, BlockVTX& blockVtx, bool checkMempool, int height, ANTIBOTRESULT& resultCode) {
     resultCode = ANTIBOTRESULT::Success;
-    // TODO (brangr): DEBUG !!!!!!!!!!!!!!!!
-    return;
     std::string table = oitm["table"].get_str();
     std::string tx_type = oitm["type"].get_str();
     
@@ -1290,16 +1288,17 @@ void AntiBot::CheckTransactionRIItem(UniValue oitm, BlockVTX& blockVtx, bool che
 }
 
 bool AntiBot::CheckInputs(CTransactionRef& tx) {
-    for (auto& in : tx->vin) {
-        if (!g_pocketdb->Exists(
-                reindexer::Query("UTXO")
-                .Where("txid", CondEq, in.prevout.hash.GetHex())
-                .Where("txout", CondEq, (int)in.prevout.n)
-                .Where("spent_block", CondEq, 0))
-        ) {
-            return false;
-        }
-    }
+    // TODO (brangr): Need?
+    //    for (auto& in : tx->vin) {
+//        if (!g_pocketdb->Exists(
+//                reindexer::Query("UTXO")
+//                .Where("txid", CondEq, in.prevout.hash.GetHex())
+//                .Where("txout", CondEq, (int)in.prevout.n)
+//                .Where("spent_block", CondEq, 0))
+//        ) {
+//            return false;
+//        }
+//    }
 
     return true;
 }

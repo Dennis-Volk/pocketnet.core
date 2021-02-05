@@ -8,7 +8,6 @@
 #include <validation.h>
 //-----------------------------------------------------
 std::unique_ptr<AddrIndex> g_addrindex;
-bool gPruneRDB;
 //-----------------------------------------------------
 AddrIndex::AddrIndex()
 {
@@ -417,12 +416,6 @@ bool AddrIndex::IndexBlock(const CBlock& block, CBlockIndex* pindex)
         LogPrintf("(AddrIndex::IndexBlock) computeCommentRatings - block (%s)\n", block.GetHash().GetHex());
         return false;
     }
-
-    // if (pindex->nHeight % 100 == 0) {
-    //     if (!PruneDB(pindex)) {
-    //         LogPrintf("(AddrIndex::PruneDB) block %s height %s\n", block.GetHash().GetHex(), pindex->nHeight);
-    //     }
-    // }
 
     return true;
 }
@@ -1107,6 +1100,11 @@ bool AddrIndex::SetBlockRIData(std::string& data, int height)
     return true;
 }
 
+bool AddrIndex::SetBlockData(const auto& data, int height)
+{
+
+}
+
 bool AddrIndex::GetTXRIData(CTransactionRef& tx, std::string& data)
 {
     std::string ri_table = "";
@@ -1618,46 +1616,4 @@ UniValue AddrIndex::GetUniValue(const CTransactionRef& tx, Item& item, std::stri
     }
 
     return oitm;
-}
-
-bool AddrIndex::PruneDB(CBlockIndex* pindex) {
-    size_t deleted = 0;
-    LogPrintf("AddrIndex::PruneDB -> ");
-
-    // UTXO
-    if (!g_pocketdb->DeleteWithCommit(
-        reindexer::Query("UTXO")
-            .Where("block", CondLt, pindex->nHeight - 500)
-            .Not().Where("spent_block", CondEq, 0)
-    , deleted).ok()) return false;
-    LogPrintf("UTXO = %s; ", deleted);
-
-    // Scores
-    // deleted = 0;
-    // if (!g_pocketdb->DeleteWithCommit(
-    //     reindexer::Query("Scores")
-    //         .Where("time", CondLt, (int64_t)pindex->nTime - GetActualLimit(Limit::scores_depth_modify_reputation, pindex->nHeight))
-    // , deleted).ok()) return false;
-    // LogPrintf("Scores = %s; ", deleted);
-
-    // UserRatings
-    // TODO (brangr):
-
-    // PostRatings
-    // TODO (brangr):
-    
-    // CommentRatings
-    // TODO (brangr):
-    
-    // Posts
-    // TODO (brangr):
-    
-    // Comments after posts
-    // TODO (brangr):
-
-    // Rebuild indexes after shrink
-    g_pocketdb->UpdateIndexes();
-    
-    LogPrintf("\n");
-    return true;
 }

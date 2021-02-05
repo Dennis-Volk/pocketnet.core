@@ -1389,11 +1389,10 @@ bool AppInitMain()
     }
 
     g_benchmark = std::unique_ptr<Benchmark>(new Benchmark());
-	// ********************************************************* Step 4.2: Start AddrIndex
-	g_addrindex = std::unique_ptr<AddrIndex>(new AddrIndex());
-    gPruneRDB = gArgs.GetBoolArg("-prunerdb", false);
-	// ********************************************************* Step 4.3: Start AntiBot
-	g_antibot = std::unique_ptr<AntiBot>(new AntiBot());
+    // ********************************************************* Step 4.2: Start AddrIndex
+    g_addrindex = std::unique_ptr<AddrIndex>(new AddrIndex());
+    // ********************************************************* Step 4.3: Start AntiBot
+    g_antibot = std::unique_ptr<AntiBot>(new AntiBot());
 
     // ********************************************************* Step 5: verify wallet database integrity
     if (!g_wallet_init_interface.Verify()) return false;

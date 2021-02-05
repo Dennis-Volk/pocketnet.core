@@ -58,7 +58,7 @@ bool PocketRepository::Init(const string &table) {
         exec(" create table if not exists Mempool ("
              "  Txid text primary key not null,"
              "  TxidSource text,"
-             "  Table text not null,"
+             "  Model text not null,"
              "  Data blob not null"
              " );"
         );
@@ -90,10 +90,10 @@ bool PocketRepository::Init(const string &table) {
     // UserRatings
     if (table == "UserRatings" || table == "ALL") {
         exec(" create table if not exists UserRatings ("
-             "  block int not null,"
-             "  address text not null,"
-             "  reputation int not null,"
-             " primary key (address, block)"
+             "  Block int not null,"
+             "  Address text not null,"
+             "  Reputation int not null,"
+             " primary key (Address, Block)"
              " );"
         );
     }
@@ -122,37 +122,15 @@ bool PocketRepository::Init(const string &table) {
         );
     }
 
-    // Posts Hitstory
-    if (table == "PostsHistory" || table == "ALL") {
-        exec("create table if not exists PostsHistory ("
-             "txid text not null,"
-             "txidEdit text,"
-             "txidRepost text,"
-             "block int not null,"
-             "time int not null,"
-             "address text not null,"
-             "type int,"
-             "lang text,"
-             "caption text,"
-             "message text,"
-             "tags text,"
-             "url text,"
-             "images text,"
-             "settings text,"
-             "primary key (txid, block)"
-             ");"
-        );
-    }
-
     // PostRatings
     if (table == "PostRatings" || table == "ALL") {
         exec("create table if not exists PostRatings ("
-             "block int not null,"
-             "posttxid text not null,"
-             "scoreSum text not null,"
-             "scoreCnt int not null,"
-             "reputation int not null,"
-             "primary key (posttxid, block)"
+             " Block int not null,"
+             " PostTxid text not null,"
+             " ScoreSum text not null,"
+             " ScoreCnt int not null,"
+             " Reputation int not null,"
+             " primary key (PostTxid, Block)"
              ");"
         );
     }
@@ -160,66 +138,40 @@ bool PocketRepository::Init(const string &table) {
     // Scores
     if (table == "Scores" || table == "ALL") {
         exec("create table if not exists Scores ("
-             "txid text primary key not null,"
-             "block int not null,"
-             "time int not null,"
-             "posttxid text not null,"
-             "address text not null,"
-             "value int not null"
+             " Txid text primary key not null,"
+             " Block int not null,"
+             " Time int not null,"
+             " PostTxid text not null,"
+             " Address text not null,"
+             " Value int not null"
              ");"
         );
     }
 
     // Subscribes
-    if (table == "SubscribesView" || table == "ALL") {
-        exec("create table if not exists SubscribesView ("
-             "txid text not null,"
-             "block int not null,"
-             "time int not null,"
-             "address text not null,"
-             "address_to text not null,"
-             "private int not null,"
-             "primary key (address, address_to)"
-             ");"
-        );
-    }
-
-    // RI SubscribesHistory
     if (table == "Subscribes" || table == "ALL") {
         exec("create table if not exists Subscribes ("
-             "txid text primary key not null,"
-             "block int not null,"
-             "time int not null,"
-             "address text not null,"
-             "address_to text not null,"
-             "private int not null,"
-             "unsubscribe int not null"
+             " Txid text primary key not null,"
+             " Block int not null,"
+             " Time int not null,"
+             " Address text not null,"
+             " Address_to text not null,"
+             " Private int not null,"
+             " Unsubscribe int not null"
              ");"
         );
     }
 
-    // Blocking
-    if (table == "BlockingView" || table == "ALL") {
-        exec("create table if not exists BlockingView ("
-             "txid text primary key not null,"
-             "block int not null,"
-             "time int not null,"
-             "address text not null,"
-             "address_to text not null,"
-             "address_reputation int not null"
-             ");"
-        );
-    }
-
-    // BlockingHistory
-    if (table == "Blocking" || table == "ALL") {
+    // Blockings
+    if (table == "Blockings" || table == "ALL") {
         exec("create table if not exists Blocking ("
-             "txid text primary key not null,"
-             "block int not null,"
-             "time int not null,"
-             "address text not null,"
-             "address_to text not null,"
-             "unblocking int not null"
+             " Txid text primary key not null,"
+             " Block int not null,"
+             " Time int not null,"
+             " Address text not null,"
+             " Address_to text not null,"
+             " Unblocking int not null"
+             " AddressReputation int not null"
              ");"
         );
     }
@@ -227,12 +179,12 @@ bool PocketRepository::Init(const string &table) {
     // Complains
     if (table == "Complains" || table == "ALL") {
         exec("create table if not exists Complains ("
-             "txid text primary key not null,"
-             "block int not null,"
-             "time int not null,"
-             "posttxid text not null,"
-             "address text not null,"
-             "reason int not null"
+             " Txid text primary key not null,"
+             " Block int not null,"
+             " Time int not null,"
+             " Posttxid text not null,"
+             " Address text not null,"
+             " Reason int not null"
              ");"
         );
     }
@@ -240,14 +192,14 @@ bool PocketRepository::Init(const string &table) {
     // UTXO
     if (table == "Utxo" || table == "ALL") {
         exec("create table if not exists Utxo ("
-             "txid text not null,"
-             "txout int not null,"
-             "time int not null,"
-             "block int not null,"
-             "address text not null,"
-             "amount int not null,"
-             "spent_block int,"
-             "primary key (txid, txout)"
+             " Txid text not null,"
+             " Txout int not null,"
+             " Time int not null,"
+             " Block int not null,"
+             " Address text not null,"
+             " Amount int not null,"
+             " SpentBlock int,"
+             " primary key (Txid, Txout)"
              ");"
         );
     }
@@ -255,10 +207,10 @@ bool PocketRepository::Init(const string &table) {
     // Addresses
     if (table == "Addresses" || table == "ALL") {
         exec("create table if not exists Addresses ("
-             "address text primary key not null,"
-             "txid text not null,"
-             "block text not null,"
-             "time int not null"
+             " Address text primary key not null,"
+             " Txid text not null,"
+             " Block text not null,"
+             " Time int not null"
              ");"
         );
     }
@@ -266,19 +218,18 @@ bool PocketRepository::Init(const string &table) {
     // Comment
     if (table == "Comment" || table == "ALL") {
         exec("create table if not exists Comment ("
-             "txid text primary key not null,"
-             "otxid text not null,"
-             "last int not null,"
-             "postid text not null,"
-             "address text not null,"
-             "time int not null,"
-             "block int not null,"
-             "msg text not null,"
-             "parentid text"
-             "answerid text"
-             "scoreUp int"
-             "scoreDown int"
-             "reputation int"
+             " Txid text primary key not null,"
+             " TxidEdit text not null,"
+             " PostTxid text not null,"
+             " Address text not null,"
+             " Time int not null,"
+             " Block int not null,"
+             " Msg text not null,"
+             " Parentid text"
+             " Answerid text"
+             " ScoreUp int"
+             " ScoreDown int"
+             " Reputation int"
              ");"
         );
     }
@@ -286,12 +237,12 @@ bool PocketRepository::Init(const string &table) {
     // CommentRatings
     if (table == "CommentRatings" || table == "ALL") {
         exec("create table if not exists CommentRatings ("
-             "block int not null,"
-             "commentid text not null,"
-             "scoreUp text not null,"
-             "scoreDown int not null,"
-             "reputation int not null,"
-             "primary key (commentid, block)"
+             " Block int not null,"
+             " CommentTxid text not null,"
+             " ScoreUp text not null,"
+             " ScoreDown int not null,"
+             " Reputation int not null,"
+             " primary key (CommentTxid, Block)"
              ");"
         );
     }
@@ -299,12 +250,12 @@ bool PocketRepository::Init(const string &table) {
     // CommentScores
     if (table == "CommentScores" || table == "ALL") {
         exec("create table if not exists CommentScores ("
-             "txid text primary key not null,"
-             "block int not null,"
-             "time int not null,"
-             "commentid text not null,"
-             "address text not null,"
-             "value int not null"
+             " Txid text primary key not null,"
+             " Block int not null,"
+             " Time int not null,"
+             " CommentTxid text not null,"
+             " Address text not null,"
+             " Value int not null"
              ");"
         );
     }
