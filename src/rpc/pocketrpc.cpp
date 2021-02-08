@@ -31,9 +31,9 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
         }
     }
 }
-static UniValue _sendrawtransaction(RTransaction& rtx)
+static UniValue _sendrawtransaction(CTransactionRef& tx)
 {
-    const uint256& hashTx = rtx->GetHash();
+    const uint256& hashTx = tx->GetHash();
 
     std::promise<void> promise;
     CAmount nMaxRawTxFee = maxTxFee;
@@ -42,7 +42,7 @@ static UniValue _sendrawtransaction(RTransaction& rtx)
         LOCK(cs_main);
         CCoinsViewCache& view = *pcoinsTip;
         bool fHaveChain = false;
-        for (size_t o = 0; !fHaveChain && o < rtx->vout.size(); o++) {
+        for (size_t o = 0; !fHaveChain && o < tx->vout.size(); o++) {
             const Coin& existingCoin = view.AccessCoin(COutPoint(hashTx, o));
             fHaveChain = !existingCoin.IsSpent();
         }
@@ -51,7 +51,7 @@ static UniValue _sendrawtransaction(RTransaction& rtx)
             // push to local node and sync with wallets
             CValidationState state;
             bool fMissingInputs;
-            if (!AcceptToMemoryPool(mempool, state, rtx, &fMissingInputs, nullptr /* plTxnReplaced */, false /* bypass_limits */, nMaxRawTxFee)) {
+            if (!AcceptToMemoryPool(mempool, state, tx, &fMissingInputs, nullptr /* plTxnReplaced */, false /* bypass_limits */, nMaxRawTxFee)) {
                 if (state.IsInvalid()) {
                     throw JSONRPCError(RPC_TRANSACTION_REJECTED, FormatStateMessage(state));
                 } else {
@@ -293,8 +293,8 @@ UniValue getPostData(reindexer::Item& itm, std::string address)
 
         int myScore = 0;
         if (cmntRes[0].GetJoined().size() > 1 && cmntRes[0].GetJoined()[1].Count() > 0) {
-           reindexer::Item ocmntScoreItm = cmntRes[0].GetJoined()[1][0].GetItem();
-           myScore = ocmntScoreItm["value"].As<int>();
+            reindexer::Item ocmntScoreItm = cmntRes[0].GetJoined()[1][0].GetItem();
+            myScore = ocmntScoreItm["value"].As<int>();
         }
 
         oCmnt.pushKV("id", cmntItm["otxid"].As<string>());
@@ -375,25 +375,23 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
     RPCTypeCheck(request.params, {UniValue::VSTR, UniValue::VOBJ, UniValue::VSTR});
     //-------------------------------------------------
     std::string address = "";
-    CMutableTransaction m_new_tx;
-    if (!DecodeHexTx(m_new_tx, request.params[0].get_str()))
+    CMutableTransaction mutTx;
+    if (!DecodeHexTx(mutTx, request.params[0].get_str()))
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
 
-    if (!GetInputAddress(m_new_tx.vin[0].prevout.hash, m_new_tx.vin[0].prevout.n, address)) {
+    if (!GetInputAddress(mutTx.vin[0].prevout.hash, mutTx.vin[0].prevout.n, address)) {
         throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid address");
     }
 
-    //CTransactionRef new_tx(MakeTransactionRef(std::move(m_new_tx)));
-    RTransaction new_rtx(m_new_tx);
-    std::string new_txid = new_rtx->GetHash().GetHex();
+    std::string txid = mutTx.GetHash().GetHex();
 
     // Antibot check this transaction
     std::string mesType = request.params[2].get_str();
-    int64_t txTime = new_rtx->nTime;
+    int64_t txTime = mutTx.nTime;
 
     if (mesType == "share") {
-        new_rtx.pTable = "Posts";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct Post record;
+        mutTx.PocketData = &record;
 
         std::string postlang = "en";
         if (request.params[1].exists("l"))
@@ -402,188 +400,171 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         // Posts:
         //   txid - txid of original post transaction
         //   txidEdit - txid of post transaction
-        std::string _txid_edit = "";
-        if (request.params[1].exists("txidEdit")) _txid_edit = request.params[1]["txidEdit"].get_str();
-        if (_txid_edit != "") {
-            reindexer::Item _itmP;
-            reindexer::Error _err = g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, _txid_edit), _itmP);
-
-            if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid txidEdit. Post not found.");
-
-            txTime = _itmP["time"].As<int64_t>();
-            //postlang = _itmP["lang"].As<string>();
+        std::string txidEdit;
+        if (request.params[1].exists("txidEdit")) txidEdit = request.params[1]["txidEdit"].get_str();
+        if (!txidEdit.empty()) {
+            // TODO (brangr): @@@ select from SQL
+            //            reindexer::Item _itmP;
+            //            reindexer::Error _err = g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, txidEdit), _itmP);
+            //            if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid txidEdit. Post not found.");
+            //
+            //            txTime = _itmP["time"].As<int64_t>();
         }
 
-        std::string _txid_repost = "";
-        if (request.params[1].exists("txidRepost")) _txid_repost = request.params[1]["txidRepost"].get_str();
-        if (_txid_repost != "") {
-            reindexer::Item _itmP;
-            reindexer::Error _err = g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, _txid_repost), _itmP);
-
-            if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid txidRepost. Post not found.");
+        std::string txidRepost;
+        if (request.params[1].exists("txidRepost")) txidRepost = request.params[1]["txidRepost"].get_str();
+        if (!txidRepost.empty()) {
+            // TODO (brangr): @@@ select from sqlite
+            //            reindexer::Item _itmP;
+            //            reindexer::Error _err = g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, txidRepost), _itmP);
+            //            if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid txidRepost. Post not found.");
         }
 
-        new_rtx.pTransaction["txid"] = _txid_edit == "" ? new_txid : _txid_edit;
-        new_rtx.pTransaction["txidEdit"] = _txid_edit == "" ? "" : new_txid;
-        new_rtx.pTransaction["txidRepost"] = _txid_repost;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["lang"] = postlang;
-        new_rtx.pTransaction["message"] = request.params[1]["m"].get_str();
+        record.Txid = txidEdit.empty() ? txid : txidEdit;
+        record.TxidEdit = txidEdit.empty() ? "" : txid;
+        record.TxidRepost = txidRepost;
+        record.Block = -1;
+        record.Address = address;
+        record.Time = txTime;
+        record.Lang = postlang;
+        record.Message = request.params[1]["m"].get_str();
 
-        if (request.params[1].exists("c")) new_rtx.pTransaction["caption"] = request.params[1]["c"].get_str();
-        if (request.params[1].exists("u")) new_rtx.pTransaction["url"] = request.params[1]["u"].get_str();
-        if (request.params[1].exists("s")) new_rtx.pTransaction["settings"] = request.params[1]["s"].get_obj().write();
+        if (request.params[1].exists("c")) record.Caption = request.params[1]["c"].get_str();
+        if (request.params[1].exists("u")) record.Url = request.params[1]["u"].get_str();
+        if (request.params[1].exists("s")) record.Settings = request.params[1]["s"].get_obj().write();
+        if (request.params[1].exists("t")) record.Tags = request.params[1]["t"].get_array().write();
+        if (request.params[1].exists("i")) record.Images = request.params[1]["i"].get_array().write();
 
-        vector<string> _tags;
-        if (request.params[1].exists("t")) {
-            UniValue tags = request.params[1]["t"].get_array();
-            for (unsigned int idx = 0; idx < tags.size(); idx++) {
-                _tags.push_back(tags[idx].get_str());
-            }
-        }
-        new_rtx.pTransaction["tags"] = _tags;
-
-
-        vector<string> _images;
-        if (request.params[1].exists("i")) {
-            UniValue images = request.params[1]["i"].get_array();
-            for (unsigned int idx = 0; idx < images.size(); idx++) {
-                _images.push_back(images[idx].get_str());
-            }
-        }
-        new_rtx.pTransaction["images"] = _images;
-
-        // 0 - simple post (default)
-        // 1 - video post
-        // 2 - image post
+        // TODO (brangr): bit mask
         int share_type = 0;
         if (request.params[1].exists("type") && request.params[1]["type"].isNum()) {
             share_type = request.params[1]["type"].get_int();
         }
-        new_rtx.pTransaction["type"] = share_type;
+        record.Type = share_type;
 
     } else if (mesType == "upvoteShare") {
-        new_rtx.pTable = "Scores";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct PostScore record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["posttxid"] = request.params[1]["share"].get_str();
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["time"] = txTime;
+        record.Txid = txid;
+        record.Block = -1;
+        record.PostTxid = request.params[1]["share"].get_str();
+        record.Address = address;
+        record.Time = txTime;
 
         int _val;
         ParseInt32(request.params[1]["value"].get_str(), &_val);
-        new_rtx.pTransaction["value"] = _val;
+        record.Value = _val;
 
     } else if (mesType == "subscribe" || mesType == "subscribePrivate") {
-        new_rtx.pTable = "Subscribes";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct Subscribe record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["address_to"] = request.params[1]["address"].get_str();
-        new_rtx.pTransaction["private"] = (mesType == "subscribePrivate");
-        new_rtx.pTransaction["unsubscribe"] = false;
+        record.Txid = txid;
+        record.Block = -1;
+        record.Time = txTime;
+        record.Address = address;
+        record.AddressTo = request.params[1]["address"].get_str();
+        record.Private = (mesType == "subscribePrivate");
+        record.Unsubscribe = false;
 
     } else if (mesType == "unsubscribe") {
-        reindexer::Item _itm;
-        reindexer::Error _err = g_pocketdb->SelectOne(
-            reindexer::Query("SubscribesView")
-                .Where("address", CondEq, address)
-                .Where("address_to", CondEq, request.params[1]["address"].get_str()),
-            _itm);
-
-        if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction");
+        // TODO (brangr): @@@ check with SQL
+        //        reindexer::Item _itm;
+        //        reindexer::Error _err = g_pocketdb->SelectOne(
+        //            reindexer::Query("SubscribesView")
+        //                .Where("address", CondEq, address)
+        //                .Where("address_to", CondEq, request.params[1]["address"].get_str()),
+        //            _itm);
+        //
+        //        if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction");
         //----------------------------
-        new_rtx.pTable = "Subscribes";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct Subscribe record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["address_to"] = request.params[1]["address"].get_str();
-        new_rtx.pTransaction["private"] = _itm["private"].As<bool>();
-        new_rtx.pTransaction["unsubscribe"] = true;
+        record.Txid = txid;
+        record.Block = -1;
+        record.Time = txTime;
+        record.Address = address;
+        record.AddressTo = request.params[1]["address"].get_str();
+        // TODO (brangr): @@@ get from sql
+        //        record.Private = _itm["private"].As<bool>();
+        record.Unsubscribe = true;
 
     } else if (mesType == "userInfo") {
-        new_rtx.pTable = "Users";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct User record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["id"] = -1;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["name"] = request.params[1]["n"].get_str();
-        new_rtx.pTransaction["avatar"] = request.params[1]["i"].get_str();
-        new_rtx.pTransaction["lang"] = request.params[1]["l"].get_str() == "" ? "en" : request.params[1]["l"].get_str();
+        record.Txid = txid;
+        record.Block = -1;
+        record.Id = -1;
+        record.Address = address;
+        record.Name = request.params[1]["n"].get_str();
+        record.Avatar = request.params[1]["i"].get_str();
+        record.Lang = request.params[1]["l"].get_str().empty() ? "en" : request.params[1]["l"].get_str();
 
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["regdate"] = txTime;
-        reindexer::Item user_cur;
-        if (g_pocketdb->SelectOne(reindexer::Query("UsersView").Where("address", CondEq, address), user_cur).ok()) {
-            new_rtx.pTransaction["regdate"] = user_cur["regdate"].As<int64_t>();
-        }
+        record.Time = txTime;
+        record.RegDate = txTime;
+        // TODO (brangr): @@@ get from sql
+        //        reindexer::Item user_cur;
+        //        if (g_pocketdb->SelectOne(reindexer::Query("UsersView").Where("address", CondEq, address), user_cur).ok()) {
+        //            record.regdate = user_cur["regdate"].As<int64_t>();
+        //        }
 
-        if (request.params[1].exists("a")) new_rtx.pTransaction["about"] = request.params[1]["a"].get_str();
-        if (request.params[1].exists("s")) new_rtx.pTransaction["url"] = request.params[1]["s"].get_str();
-        if (request.params[1].exists("b")) new_rtx.pTransaction["donations"] = request.params[1]["b"].get_str();
-        if (request.params[1].exists("k")) new_rtx.pTransaction["pubkey"] = request.params[1]["k"].get_str();
+        if (request.params[1].exists("a")) record.About = request.params[1]["a"].get_str();
+        if (request.params[1].exists("s")) record.Url = request.params[1]["s"].get_str();
+        if (request.params[1].exists("b")) record.Donations = request.params[1]["b"].get_str();
+        if (request.params[1].exists("k")) record.Pubkey = request.params[1]["k"].get_str();
 
-        new_rtx.pTransaction["referrer"] = "";
         if (request.params[1].exists("r")) {
-            new_rtx.pTransaction["referrer"] = request.params[1]["r"].get_str();
+            record.Referrer = request.params[1]["r"].get_str();
         }
 
     } else if (mesType == "complainShare") {
-        new_rtx.pTable = "Complains";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct Complain record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["posttxid"] = request.params[1]["share"].get_str();
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["time"] = txTime;
+        record.Txid = txid;
+        record.Block = -1;
+        record.PostTxid = request.params[1]["share"].get_str();
+        record.Address = address;
+        record.Time = txTime;
 
         int _val;
         ParseInt32(request.params[1]["reason"].get_str(), &_val);
-        new_rtx.pTransaction["reason"] = _val;
+        record.Reason = _val;
 
     } else if (mesType == "blocking") {
-        new_rtx.pTable = "Blocking";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct Blocking record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["address_to"] = request.params[1]["address"].get_str();
-        new_rtx.pTransaction["unblocking"] = false;
+        record.Txid = txid;
+        record.Block = -1;
+        record.Time = txTime;
+        record.Address = address;
+        record.AddressTo = request.params[1]["address"].get_str();
+        record.Unblocking = false;
 
     } else if (mesType == "unblocking") {
-        reindexer::Item _itm;
-        reindexer::Error _err = g_pocketdb->SelectOne(
-            reindexer::Query("BlockingView")
-                .Where("address", CondEq, address)
-                .Where("address_to", CondEq, request.params[1]["address"].get_str()),
-            _itm);
-
-        if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction");
+        // TODO (brangr): @@@ sql
+        //        reindexer::Item _itm;
+        //        reindexer::Error _err = g_pocketdb->SelectOne(
+        //            reindexer::Query("BlockingView")
+        //                .Where("address", CondEq, address)
+        //                .Where("address_to", CondEq, request.params[1]["address"].get_str()),
+        //            _itm);
+        //
+        //        if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction");
         //----------------------------
-        new_rtx.pTable = "Blocking";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct Blocking record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["address_to"] = request.params[1]["address"].get_str();
-        new_rtx.pTransaction["unblocking"] = true;
+        record.Txid = txid;
+        record.Block = -1;
+        record.Time = txTime;
+        record.Address = address;
+        record.AddressTo = request.params[1]["address"].get_str();
+        record.Unblocking = true;
 
     } else if (mesType == "comment" || mesType == "commentEdit" || mesType == "commentDelete") {
         bool valid = true;
@@ -594,26 +575,24 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         valid = valid & request.params[1].exists("answerid");
         if (!valid) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameters");
 
-        new_rtx.pTable = "Comment";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct Comment record;
+        mutTx.PocketData = &record;
 
-        std::string _otxid = new_txid;
-        if (request.params[1].exists("id")) _otxid = request.params[1]["id"].get_str();
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["otxid"] = _otxid;
+        std::string txEdit = txid;
+        if (request.params[1].exists("id")) txEdit = request.params[1]["id"].get_str();
+        record.Txid = txid;
+        record.TxidEdit = txEdit;
 
-        new_rtx.pTransaction["block"] = -1;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["last"] = true;
+        record.Block = -1;
+        record.Address = address;
+        record.Time = txTime;
 
-        new_rtx.pTransaction["msg"] = "";
         if (mesType != "commentDelete")
-            new_rtx.pTransaction["msg"] = request.params[1]["msg"].get_str();
+            record.Msg = request.params[1]["msg"].get_str();
 
-        new_rtx.pTransaction["postid"] = request.params[1]["postid"].get_str();
-        new_rtx.pTransaction["parentid"] = request.params[1]["parentid"].get_str();
-        new_rtx.pTransaction["answerid"] = request.params[1]["answerid"].get_str();
+        record.PostTxid = request.params[1]["postid"].get_str();
+        record.ParentTxid = request.params[1]["parentid"].get_str();
+        record.AnswerTxid = request.params[1]["answerid"].get_str();
 
     } else if (mesType == "cScore") {
         bool valid = true;
@@ -621,33 +600,36 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         valid = valid & request.params[1].exists("value");
         if (!valid) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameters");
 
-        new_rtx.pTable = "CommentScores";
-        new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
+        struct CommentScore record;
+        mutTx.PocketData = &record;
 
-        new_rtx.pTransaction["txid"] = new_txid;
-        new_rtx.pTransaction["address"] = address;
-        new_rtx.pTransaction["time"] = txTime;
-        new_rtx.pTransaction["block"] = -1;
+        record.Txid = txid;
+        record.Address = address;
+        record.Time = txTime;
+        record.Block = -1;
 
-        new_rtx.pTransaction["commentid"] = request.params[1]["commentid"].get_str();
+        record.CommentTxid = request.params[1]["commentid"].get_str();
 
         int _val;
         ParseInt32(request.params[1]["value"].get_str(), &_val);
-        new_rtx.pTransaction["value"] = _val;
+        record.Value = _val;
 
     } else {
         throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction type");
     }
+
+    CTransactionRef tx(MakeTransactionRef(std::move(mutTx)));
     //-------------------------------------------------
     // Check transaction with antibot
-    ANTIBOTRESULT ab_result;
-    g_antibot->CheckTransactionRIItem(g_addrindex->GetUniValue(new_rtx, new_rtx.pTransaction, new_rtx.pTable), chainActive.Height() + 1, ab_result);
-    if (ab_result != ANTIBOTRESULT::Success) {
-        throw JSONRPCError(ab_result, mesType);
-    }
+    // TODO (brangr): @@@
+    //    ANTIBOTRESULT ab_result;
+    //    g_antibot->CheckTransactionRIItem(g_addrindex->GetUniValue(tx, tx.pTransaction, tx.pTable), chainActive.Height() + 1, ab_result);
+    //    if (ab_result != ANTIBOTRESULT::Success) {
+    //        throw JSONRPCError(ab_result, mesType);
+    //    }
 
     // Antibot checked -> create transaction in blockchain
-    UniValue rt = _sendrawtransaction(new_rtx);
+    UniValue rt = _sendrawtransaction(tx);
     //-------------------------------------------------
     return rt;
 }
@@ -756,7 +738,9 @@ UniValue getrawtransactionwithmessage(const JSONRPCRequest& request)
         reindexer::QueryResults queryResUpv;
         err = g_pocketdb->DB()->Select(reindexer::Query("Scores").Where("posttxid", CondEq, itm["txid"].As<string>()).Where("value", CondGt, 3), queryResUpv);
 
-        if (queryResComp.Count() <= 7 || queryResComp.Count() / (queryResUpv.Count() == 0 ? 1 : queryResUpv.Count() == 0 ? 1 : queryResUpv.Count()) <= 0.1) {
+        if (queryResComp.Count() <= 7 || queryResComp.Count() / (queryResUpv.Count() == 0 ? 1 : queryResUpv.Count() == 0 ? 1 :
+                                                                                                                           queryResUpv.Count()) <=
+                                             0.1) {
             a.push_back(getPostData(itm, address_from));
             resultCount -= 1;
         }
@@ -2104,9 +2088,10 @@ UniValue getlastcomments(const JSONRPCRequest& request)
             .Sort("time", true)
             .Limit(resultCount)
             .InnerJoin("otxid", "txid", CondEq, Query("Comment").Limit(1))
-            //.LeftJoin("otxid", "commentid", CondEq, Query("CommentScores").Where("address", CondEq, address).Limit(1))
-            //.InnerJoin("postid", "txid", CondEq, Query("Posts").Where("lang", (lang == "" ? CondGe : CondEq), lang).Limit(1))
-        ,commRes);
+        //.LeftJoin("otxid", "commentid", CondEq, Query("CommentScores").Where("address", CondEq, address).Limit(1))
+        //.InnerJoin("postid", "txid", CondEq, Query("Posts").Where("lang", (lang == "" ? CondGe : CondEq), lang).Limit(1))
+        ,
+        commRes);
 
     UniValue aResult(UniValue::VARR);
     for (auto& it : commRes) {
@@ -2340,7 +2325,7 @@ UniValue getpagescores(const JSONRPCRequest& request)
 
     UniValue result(UniValue::VARR);
 
-/*
+    /*
     reindexer::QueryResults queryRes;
     g_pocketdb->DB()->Select(
         reindexer::Query("Posts").Where("txid", CondSet, TxIds).LeftJoin("txid", "posttxid", CondEq, Query("Scores").Where("address", CondEq, address).Where("value", CondGt, 3)), queryRes);
@@ -2463,38 +2448,38 @@ UniValue debug(const JSONRPCRequest& request)
 
 static const CRPCCommand commands[] =
     {
-        {"pocketnetrpc", "sendrawtransactionwithmessage",     &sendrawtransactionwithmessage,     {"hexstring", "message", "type"},                                       false},
-        {"pocketnetrpc", "getrawtransactionwithmessage",      &getrawtransactionwithmessage,      {"address_from", "address_to", "start_txid", "count"},                  false},
-        {"pocketnetrpc", "getrawtransactionwithmessage2",     &getrawtransactionwithmessage2,     {"address_from", "address_to", "start_txid", "count"},                  false},
-        {"pocketnetrpc", "getrawtransactionwithmessagebyid",  &getrawtransactionwithmessagebyid,  {"txs", "address"},                                                     false},
-        {"pocketnetrpc", "getrawtransactionwithmessagebyid2", &getrawtransactionwithmessagebyid2, {"txs", "address"},                                                     false},
-        {"pocketnetrpc", "getuserprofile",                    &getuserprofile,                    {"addresses", "short"},                                                 false},
-        {"pocketnetrpc", "getmissedinfo",                     &getmissedinfo,                     {"address", "blocknumber"},                                             false},
-        {"pocketnetrpc", "getmissedinfo2",                    &getmissedinfo2,                    {"address", "blocknumber"},                                             false},
-        {"pocketnetrpc", "txunspent",                         &txunspent,                         {"addresses", "minconf", "maxconf", "include_unsafe", "query_options"}, false},
-        {"pocketnetrpc", "getaddressregistration",            &getaddressregistration,            {"addresses"},                                                          false},
-        {"pocketnetrpc", "getuserstate",                      &getuserstate,                      {"address", "time"},                                                    false},
-        {"pocketnetrpc", "gettime",                           &gettime,                           {},                                                                     false},
-        {"pocketnetrpc", "getrecommendedposts",               &getrecommendedposts,               {"address", "count"},                                                   false},
-        {"pocketnetrpc", "getrecommendedposts2",              &getrecommendedposts2,              {"address", "count"},                                                   false},
-        {"pocketnetrpc", "searchtags",                        &searchtags,                        {"search_string", "count"},                                             false},
-        {"pocketnetrpc", "search",                            &search,                            {"search_string", "type", "count"},                                     false},
-        {"pocketnetrpc", "search2",                           &search2,                           {"search_string", "type", "count"},                                     false},
-        {"pocketnetrpc", "gethotposts",                       &gethotposts,                       {"count", "depth"},                                                     false},
-        {"pocketnetrpc", "gethotposts2",                      &gethotposts2,                      {"count", "depth"},                                                     false},
-        {"pocketnetrpc", "getuseraddress",                    &getuseraddress,                    {"name", "count"},                                                      false},
-        {"pocketnetrpc", "getreputations",                    &getreputations,                    {},                                                                     false},
-        {"pocketnetrpc", "getcontents",                       &getcontents,                       {"address"},                                                            false},
-        {"pocketnetrpc", "gettags",                           &gettags,                           {"address", "count"},                                                   false},
-        {"pocketnetrpc", "getlastcomments2",                  &getlastcomments,                   {"count", "address"},                                                   false},
-        {"pocketnetrpc", "getlastcomments",                   &getlastcomments,                   {"count", "address"},                                                   false},
-        {"pocketnetrpc", "getcomments2",                      &getcomments,                       {"postid", "parentid", "address", "ids"},                               false},
-        {"pocketnetrpc", "getcomments",                       &getcomments,                       {"postid", "parentid", "address", "ids"},                               false},
-        {"pocketnetrpc", "getaddressscores",                  &getaddressscores,                  {"address", "txs"},                                                     false},
-        {"pocketnetrpc", "getpostscores",                     &getpostscores,                     {"txs", "address"},                                                     false},
-        {"pocketnetrpc", "getpagescores",                     &getpagescores,                     {"txs", "address", "cmntids"},                                          false},
+        {"pocketnetrpc", "sendrawtransactionwithmessage", &sendrawtransactionwithmessage, {"hexstring", "message", "type"}, false},
+        {"pocketnetrpc", "getrawtransactionwithmessage", &getrawtransactionwithmessage, {"address_from", "address_to", "start_txid", "count"}, false},
+        {"pocketnetrpc", "getrawtransactionwithmessage2", &getrawtransactionwithmessage2, {"address_from", "address_to", "start_txid", "count"}, false},
+        {"pocketnetrpc", "getrawtransactionwithmessagebyid", &getrawtransactionwithmessagebyid, {"txs", "address"}, false},
+        {"pocketnetrpc", "getrawtransactionwithmessagebyid2", &getrawtransactionwithmessagebyid2, {"txs", "address"}, false},
+        {"pocketnetrpc", "getuserprofile", &getuserprofile, {"addresses", "short"}, false},
+        {"pocketnetrpc", "getmissedinfo", &getmissedinfo, {"address", "blocknumber"}, false},
+        {"pocketnetrpc", "getmissedinfo2", &getmissedinfo2, {"address", "blocknumber"}, false},
+        {"pocketnetrpc", "txunspent", &txunspent, {"addresses", "minconf", "maxconf", "include_unsafe", "query_options"}, false},
+        {"pocketnetrpc", "getaddressregistration", &getaddressregistration, {"addresses"}, false},
+        {"pocketnetrpc", "getuserstate", &getuserstate, {"address", "time"}, false},
+        {"pocketnetrpc", "gettime", &gettime, {}, false},
+        {"pocketnetrpc", "getrecommendedposts", &getrecommendedposts, {"address", "count"}, false},
+        {"pocketnetrpc", "getrecommendedposts2", &getrecommendedposts2, {"address", "count"}, false},
+        {"pocketnetrpc", "searchtags", &searchtags, {"search_string", "count"}, false},
+        {"pocketnetrpc", "search", &search, {"search_string", "type", "count"}, false},
+        {"pocketnetrpc", "search2", &search2, {"search_string", "type", "count"}, false},
+        {"pocketnetrpc", "gethotposts", &gethotposts, {"count", "depth"}, false},
+        {"pocketnetrpc", "gethotposts2", &gethotposts2, {"count", "depth"}, false},
+        {"pocketnetrpc", "getuseraddress", &getuseraddress, {"name", "count"}, false},
+        {"pocketnetrpc", "getreputations", &getreputations, {}, false},
+        {"pocketnetrpc", "getcontents", &getcontents, {"address"}, false},
+        {"pocketnetrpc", "gettags", &gettags, {"address", "count"}, false},
+        {"pocketnetrpc", "getlastcomments2", &getlastcomments, {"count", "address"}, false},
+        {"pocketnetrpc", "getlastcomments", &getlastcomments, {"count", "address"}, false},
+        {"pocketnetrpc", "getcomments2", &getcomments, {"postid", "parentid", "address", "ids"}, false},
+        {"pocketnetrpc", "getcomments", &getcomments, {"postid", "parentid", "address", "ids"}, false},
+        {"pocketnetrpc", "getaddressscores", &getaddressscores, {"address", "txs"}, false},
+        {"pocketnetrpc", "getpostscores", &getpostscores, {"txs", "address"}, false},
+        {"pocketnetrpc", "getpagescores", &getpagescores, {"txs", "address", "cmntids"}, false},
 
-        {"hidden", "debug",     &debug, {}},
+        {"hidden", "debug", &debug, {}},
 };
 
 void RegisterPocketnetRPCCommands(CRPCTable& t)

@@ -190,7 +190,7 @@ public:
         Write transaction for block received from another node
     */
     bool SetBlockRIData(std::string& data, int height);
-    bool SetBlockData(const auto& data, int height);
+    bool SetBlockData(const CBlock& block, int height);
     /*
         Get RI data for transaction for send to another node.
         Check transaction is PocketNet type transaction

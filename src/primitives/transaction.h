@@ -11,6 +11,7 @@
 #include <script/script.h>
 #include <serialize.h>
 #include <uint256.h>
+#include "pocketdb/pocketmodels.h"
 
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
 
@@ -314,6 +315,9 @@ public:
     const uint32_t nTime;
     const uint32_t nLockTime;
 
+    // Store social data (Post, Like, Comment, etc)
+    PocketModel* PocketData;
+
 private:
     /** Memory only. */
     const uint256 hash;
@@ -400,6 +404,8 @@ struct CMutableTransaction
     int32_t nVersion;
 	uint32_t nTime;
     uint32_t nLockTime;
+
+    PocketModel* PocketData;
 
     CMutableTransaction();
     explicit CMutableTransaction(const CTransaction& tx);

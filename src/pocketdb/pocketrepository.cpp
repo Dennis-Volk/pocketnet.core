@@ -225,8 +225,8 @@ bool PocketRepository::Init(const string &table) {
              " Time int not null,"
              " Block int not null,"
              " Msg text not null,"
-             " Parentid text"
-             " Answerid text"
+             " ParentTxid text"
+             " AnswerTxid text"
              " ScoreUp int"
              " ScoreDown int"
              " Reputation int"
@@ -265,91 +265,61 @@ bool PocketRepository::Init(const string &table) {
 
 // ---------------------- ADD -------------------------
 
-bool PocketRepository::Add(const Utxo &itm) {
-    return exec(
-        tfm::format(
-            " insert into Utxo ("
-            "   txid,"
-            "   txout,"
-            "   time,"
-            "   block,"
-            "   address,"
-            "   amount,"
-            "   spent_block"
-            " ) values ('%s',%d,%ld,%d,'%s',%ld,%d);",
-            sql(itm.Txid), itm.Txout, itm.Time, itm.Block, sql(itm.Address), itm.Amount, itm.SpentBlock
-        )
-    );
-}
-
-bool PocketRepository::Add(const User &itm) {
-    return exec(
-        tfm::format(
-            " insert into Users ("
-            "  Address,"
-            "  Id,"
-            "  Txid,"
-            "  Block,"
-            "  Time,"
-            "  Name,"
-            "  Birthday,"
-            "  Gender,"
-            "  RegDate,"
-            "  Avatar,"
-            "  About,"
-            "  Lang,"
-            "  Url,"
-            "  Pubkey,"
-            "  Donations,"
-            "  Referrer"
-            " ) values ('%s',%d,'%s',%d,%ld,'%s',%d,%d,%ld,'%s','%s','%s','%s','%s','%s','%s');",
-            sql(itm.Address), itm.Id, itm.Txid, itm.Block, itm.Time, sql(itm.Name),
-            itm.Birthday, itm.Gender, itm.RegDate, sql(itm.Avatar), sql(itm.About), sql(itm.Lang),
-            sql(itm.Url), sql(itm.Pubkey), sql(itm.Donations), sql(itm.Referrer)
-        )
-    );
-}
-
-// TODO (brangr): complete all functions
-//bool PocketRepository::Add(const Post& itm) {
+//bool PocketRepository::Add(const Utxo &itm) {
 //    return exec(
 //        tfm::format(
-//            "insert into Posts ( \
-//                Txid, \
-//                TxidEdit, \
-//                TxidRepost, \
-//                Block, \
-//                Time, \
-//                Address, \
-//                Type, \
-//                Lang, \
-//                Caption, \
-//                Message, \
-//                Tags, \
-//                Url, \
-//                Settings \
-//            ) values ('%s',%d,'%s',%d,%ld,'%s',%d,%d,%ld,'%s','%s','%s','%s','%s','%s','%s');",
-//            itm.Txid, itm.TxidEdit, itm.TxidRepost, itm.Block,
+//            " insert into Utxo ("
+//            "   txid,"
+//            "   txout,"
+//            "   time,"
+//            "   block,"
+//            "   address,"
+//            "   amount,"
+//            "   spent_block"
+//            " ) values ('%s',%d,%ld,%d,'%s',%ld,%d);",
+//            sql(itm.Txid), itm.Txout, itm.Time, itm.Block, sql(itm.Address), itm.Amount, itm.SpentBlock
+//        )
+//    );
+//}
 //
-//            sql(itm.Address), itm.Id, , itm.Block, itm.Time, sql(itm.Name),
+//bool PocketRepository::Add(const User &itm) {
+//    return exec(
+//        tfm::format(
+//            " insert into Users ("
+//            "  Address,"
+//            "  Id,"
+//            "  Txid,"
+//            "  Block,"
+//            "  Time,"
+//            "  Name,"
+//            "  Birthday,"
+//            "  Gender,"
+//            "  RegDate,"
+//            "  Avatar,"
+//            "  About,"
+//            "  Lang,"
+//            "  Url,"
+//            "  Pubkey,"
+//            "  Donations,"
+//            "  Referrer"
+//            " ) values ('%s',%d,'%s',%d,%ld,'%s',%d,%d,%ld,'%s','%s','%s','%s','%s','%s','%s');",
+//            sql(itm.Address), itm.Id, itm.Txid, itm.Block, itm.Time, sql(itm.Name),
 //            itm.Birthday, itm.Gender, itm.RegDate, sql(itm.Avatar), sql(itm.About), sql(itm.Lang),
 //            sql(itm.Url), sql(itm.Pubkey), sql(itm.Donations), sql(itm.Referrer)
 //        )
 //    );
 //}
+//
+//// TODO (brangr): complete all functions
+////bool PocketRepository::Add(const Post& itm) {
+////    return exec(
+////
+////        )
+////    );
+////}
 
-bool PocketRepository::Add(Checkpoint itm) {
-    return exec(
-        tfm::format(
-            " insert into Benchmark ("
-            "  Begin,"
-            "  End,"
-            "  Checkpoint,"
-            "  Payload"
-            " ) values (%lld,%lld,'%s','%s');",
-            itm.Begin, itm.End, sql(itm.Checkpoint), sql(itm.Payload)
-        )
-    );
+bool PocketRepository::Add(PocketModel* itm) {
+    return exec(itm->SqlInsert());
 }
 
 

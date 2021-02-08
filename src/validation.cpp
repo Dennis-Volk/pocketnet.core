@@ -574,7 +574,7 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, CValidationSt
 	return CheckInputs(tx, state, view, true, flags, cacheSigStore, true, txdata);
 }
 
-static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool& pool, CValidationState& state, RTransaction& rtx, bool* pfMissingInputs, int64_t nAcceptTime, std::list<CTransactionRef>* plTxnReplaced, bool bypass_limits, const CAmount& nAbsurdFee, std::vector<COutPoint>& coins_to_uncache, bool test_accept) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool& pool, CValidationState& state, CTransactionRef& rtx, bool* pfMissingInputs, int64_t nAcceptTime, std::list<CTransactionRef>* plTxnReplaced, bool bypass_limits, const CAmount& nAbsurdFee, std::vector<COutPoint>& coins_to_uncache, bool test_accept) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
 	const CTransaction& tx = *rtx;
 	const uint256 hash = tx.GetHash();
@@ -960,36 +960,37 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
 		// - the transaction is not dependent on any other transactions in the mempool
 		bool validForFeeEstimation = !fReplacementTransaction && !bypass_limits && IsCurrentForFeeEstimation() && pool.HasNoInputsOf(tx);
 
-        // Write reindexer part to mempool
-        std::string table;
-        if (g_addrindex->GetPocketnetTXType(rtx, table)) {
-            if (!rtx.pTransaction || rtx.pTable != table) {
-                return state.DoS(0, false, REJECT_INTERNAL, "not found reindexer data");
-            } else {
-                std::string _txid = rtx.pTransaction["txid"].As<string>();
-
-                reindexer::Item memItm = g_pocketdb->DB()->NewItem("Mempool");
-                memItm["txid"] = hash.GetHex();
-                memItm["txid_source"] = hash.GetHex() == _txid ? "" : _txid;
-                memItm["table"] = rtx.pTable;
-                memItm["data"] = EncodeBase64(rtx.pTransaction.GetJSON().ToString());
-                if (!g_addrindex->WriteMemRTransaction(memItm)) {
-                    return state.DoS(0, false, REJECT_INTERNAL, "error write reindexer data");
-                }
-            }
-        }
+                // TODO (brangr): @@@ сохраняем транзакцию только в памяти пока
+                // Write reindexer part to mempool
+//                std::string table;
+//                if (g_addrindex->GetPocketnetTXType(rtx, table)) {
+//                    if (!rtx.pTransaction || rtx.pTable != table) {
+//                        return state.DoS(0, false, REJECT_INTERNAL, "not found reindexer data");
+//                    } else {
+//                        std::string _txid = rtx.pTransaction["txid"].As<string>();
+//
+//                        reindexer::Item memItm = g_pocketdb->DB()->NewItem("Mempool");
+//                        memItm["txid"] = hash.GetHex();
+//                        memItm["txid_source"] = hash.GetHex() == _txid ? "" : _txid;
+//                        memItm["table"] = rtx.pTable;
+//                        memItm["data"] = EncodeBase64(rtx.pTransaction.GetJSON().ToString());
+//                        if (!g_addrindex->WriteMemRTransaction(memItm)) {
+//                            return state.DoS(0, false, REJECT_INTERNAL, "error write reindexer data");
+//                        }
+//                    }
+//                }
 
 		// Store transaction in memory
 		pool.addUnchecked(entry, setAncestors, validForFeeEstimation);
 
 		// trim mempool and check if tx was trimmed
 		if (!bypass_limits) {
-			LimitMempoolSize(pool, gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, gArgs.GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
-			if (!pool.exists(hash)) {
-                LogPrintf("--- validation:986: %s\n", hash.GetHex());
-                g_addrindex->ClearMempool(hash.GetHex());
-				return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool full");
-            }
+                    LimitMempoolSize(pool, gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, gArgs.GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
+                    if (!pool.exists(hash)) {
+                        LogPrintf("--- validation:986: %s\n", hash.GetHex());
+                        g_addrindex->ClearMempool(hash.GetHex());
+                                        return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool full");
+                    }
 		}
 
 
@@ -1001,10 +1002,10 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
 }
 
 /** (try to) add transaction to memory pool with a specified acceptance time **/
-static bool AcceptToMemoryPoolWithTime(const CChainParams& chainparams, CTxMemPool& pool, CValidationState& state, RTransaction& rtx, bool* pfMissingInputs, int64_t nAcceptTime, std::list<CTransactionRef>* plTxnReplaced, bool bypass_limits, const CAmount nAbsurdFee, bool test_accept) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
+static bool AcceptToMemoryPoolWithTime(const CChainParams& chainparams, CTxMemPool& pool, CValidationState& state, CTransactionRef& tx, bool* pfMissingInputs, int64_t nAcceptTime, std::list<CTransactionRef>* plTxnReplaced, bool bypass_limits, const CAmount nAbsurdFee, bool test_accept) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
 {
 	std::vector<COutPoint> coins_to_uncache;
-	bool res = AcceptToMemoryPoolWorker(chainparams, pool, state, rtx, pfMissingInputs, nAcceptTime, plTxnReplaced, bypass_limits, nAbsurdFee, coins_to_uncache, test_accept);
+	bool res = AcceptToMemoryPoolWorker(chainparams, pool, state, tx, pfMissingInputs, nAcceptTime, plTxnReplaced, bypass_limits, nAbsurdFee, coins_to_uncache, test_accept);
 
 	// Transaction is invalid - remove
 	if (!res) {
@@ -1019,16 +1020,10 @@ static bool AcceptToMemoryPoolWithTime(const CChainParams& chainparams, CTxMemPo
 	return res;
 }
 
-bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, const CTransactionRef& tx, bool* pfMissingInputs, std::list<CTransactionRef>* plTxnReplaced, bool bypass_limits, const CAmount nAbsurdFee, bool test_accept)
-{
-    RTransaction rtx(*tx);
-    return AcceptToMemoryPool(pool, state, rtx, pfMissingInputs, plTxnReplaced, bypass_limits, nAbsurdFee, test_accept);
-}
-
-bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, RTransaction& rtx, bool* pfMissingInputs, std::list<CTransactionRef>* plTxnReplaced, bool bypass_limits, const CAmount nAbsurdFee, bool test_accept)
+bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState& state, CTransactionRef& tx, bool* pfMissingInputs, std::list<CTransactionRef>* plTxnReplaced, bool bypass_limits, const CAmount nAbsurdFee, bool test_accept)
 {
 	const CChainParams& chainparams = Params();
-	return AcceptToMemoryPoolWithTime(chainparams, pool, state, rtx, pfMissingInputs, GetTime(), plTxnReplaced, bypass_limits, nAbsurdFee, test_accept);
+	return AcceptToMemoryPoolWithTime(chainparams, pool, state, tx, pfMissingInputs, GetTime(), plTxnReplaced, bypass_limits, nAbsurdFee, test_accept);
 }
 
 /**
@@ -2214,41 +2209,26 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
 
     //----------------------------------------------------------------------------------
     uint256 blockhash = block.GetHash();
-    std::vector<auto> pocketData;
 
-    // Get pocket data from memory cache
-    if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
-        std::string pocketDataSource = POCKETNET_DATA[blockhash];
-        POCKETNET_DATA.erase(blockhash);
+    // Antibot consensus rules
+    // TODO (brangr): @@@ Put Antibot checks
+
+    // Write received Pocket data to DB
+    if (!g_addrindex->SetBlockData(block, pindex->nHeight)) {
+        LogPrintf("--- Failed restore received data (%s) (AddrIndex::SetBlockData)\n", blockhash.GetHex());
+        return false;
     }
 
-    // Check reindexer data exists and Antibot checks
-    // TODO (brangr): FOR SQL WRITING LOGIC
-    //    if (!CheckBlockAdditional(pindex, block, state)) {
-    //        return false;
-    //    }
+    // TODO (brangr): @@@ думаю это больше не нужно
+    //    if (!g_addrindex->CommitRIMempool(block, pindex->nHeight)) {
+//        LogPrintf("--- Failed restore RI Mempool block (%s) (AddrIndex::CommitRIMempool)\n", blockhash.GetHex());
+//        return false;
+//    }
 
-    // Try write reindexer data
-    // Data can received by another node or this node created new block
-    // and data in mempool
-    {
-        // Write received Pocket data to Sqlite DB
-        if (!g_addrindex->SetBlockData(pocketData, pindex->nHeight)) {
-            LogPrintf("--- Failed restore received data (%s) (AddrIndex::SetBlockRIData)\n", blockhash.GetHex());
-            return false;
-        }
-
-        // Get data from RIMempool and write to general RI tables
-        if (!g_addrindex->CommitRIMempool(block, pindex->nHeight)) {
-            LogPrintf("--- Failed restore RI Mempool block (%s) (AddrIndex::CommitRIMempool)\n", blockhash.GetHex());
-            return false;
-        }
-
-        // Indexing new block
-        if (!g_addrindex->IndexBlock(block, pindex)) {
-            LogPrintf("--- Failed indexing block (%s)\n", blockhash.GetHex());
-            return false;
-        }
+    // Indexing new block data
+    if (!g_addrindex->IndexBlock(block, pindex)) {
+        LogPrintf("--- Failed indexing block (%s)\n", blockhash.GetHex());
+        return false;
     }
     //-----------------------------------------------------
     int64_t nTime4 = GetTimeMicros();
@@ -3812,6 +3792,7 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
     return true;
 }
 
+// TODO (brangr): @@@ not needed after sql
 bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string ri_table, reindexer::Item& itm) {
     std::string txid = tx->GetHash().GetHex();
 

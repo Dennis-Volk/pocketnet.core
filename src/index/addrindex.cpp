@@ -1100,9 +1100,9 @@ bool AddrIndex::SetBlockRIData(std::string& data, int height)
     return true;
 }
 
-bool AddrIndex::SetBlockData(const auto& data, int height)
+bool AddrIndex::SetBlockData(const CBlock& block, int height)
 {
-
+    // TODO (brangr): @@@ write to sql
 }
 
 bool AddrIndex::GetTXRIData(CTransactionRef& tx, std::string& data)

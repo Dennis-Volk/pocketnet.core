@@ -5,7 +5,6 @@
 #define SQLITE_H
 //-----------------------------------------------------
 #include <string>
-#include <regex>
 #include <sqlite3.h>
 #include "util.h"
 #include "pocketdb/pocketmodels.h"
@@ -22,9 +21,7 @@ private:
 
     bool exec(const string &sql);
 
-    static string sql(const string &sql) {
-        return regex_replace(sql, regex("'"), "''");
-    }
+
 
 public:
     explicit PocketRepository();
@@ -33,26 +30,7 @@ public:
 
     bool Init(const std::string& table = "ALL");
 
-    bool Add(const Utxo &itm);
-
-    bool Add(const User &itm);
-
-    bool Add(const Post &itm);
-
-    bool Add(const PostScore &itm);
-
-    bool Add(const Subscribe &itm);
-
-    bool Add(const Blocking &itm);
-
-    bool Add(const Complain &itm);
-
-    bool Add(const Comment &itm);
-
-    bool Add(const CommentScore &itm);
-
-    // Runtime benchmark
-    bool Add(const Checkpoint &itm);
+    bool Add(PocketModel* itm);
 };
 
 extern std::unique_ptr<PocketRepository> g_pocket_repository;
