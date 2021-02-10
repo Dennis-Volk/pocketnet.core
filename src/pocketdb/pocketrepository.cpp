@@ -8,21 +8,24 @@
 
 std::unique_ptr<PocketRepository> g_pocket_repository;
 
-PocketRepository::PocketRepository() {
+PocketRepository::PocketRepository()
+{
     if (sqlite3_open((GetDataDir() / "pocketdb" / "main.sqlite3").string().c_str(), &db)) {
         LogPrintf("Cannot open Sqlite DB (%s) - %s\n", (GetDataDir() / "pocketdb" / "general.sqlite3").string(),
-                  sqlite3_errmsg(db));
+            sqlite3_errmsg(db));
         sqlite3_close(db);
     }
 }
 
-PocketRepository::~PocketRepository() {
+PocketRepository::~PocketRepository()
+{
     sqlite3_close(db);
 }
 
 //-----------------------------------------------------
-bool PocketRepository::exec(const string &sql) {
-    char *zErrMsg = nullptr;
+bool PocketRepository::exec(const string& sql)
+{
+    char* zErrMsg = nullptr;
     if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &zErrMsg)) {
         // todo log
         sqlite3_free(zErrMsg);
@@ -33,13 +36,13 @@ bool PocketRepository::exec(const string &sql) {
 }
 //-----------------------------------------------------
 
-bool PocketRepository::Init(const string &table) {
+bool PocketRepository::Init(const string& table)
+{
     // Service
     if (table == "Service" || table == "ALL") {
         exec(" create table if not exists Service ("
              "  Service int primary key not null"
-             " );"
-        );
+             " );");
     }
 
     // CommentScores
@@ -49,8 +52,7 @@ bool PocketRepository::Init(const string &table) {
              "  End int not null,"
              "  Checkpoint text not null,"
              "  Payload text not null"
-             " );"
-        );
+             " );");
     }
 
     // Pocket Mempool
@@ -60,8 +62,7 @@ bool PocketRepository::Init(const string &table) {
              "  TxidSource text,"
              "  Model text not null,"
              "  Data blob not null"
-             " );"
-        );
+             " );");
     }
 
     // Users
@@ -83,8 +84,7 @@ bool PocketRepository::Init(const string &table) {
              "  Pubkey text,"
              "  Donations text,"
              "  Referrer text"
-             " );"
-        );
+             " );");
     }
 
     // UserRatings
@@ -94,8 +94,7 @@ bool PocketRepository::Init(const string &table) {
              "  Address text not null,"
              "  Reputation int not null,"
              " primary key (Address, Block)"
-             " );"
-        );
+             " );");
     }
 
     // Posts
@@ -118,8 +117,7 @@ bool PocketRepository::Init(const string &table) {
              "  ScoreSum int,"
              "  ScoreCnt int,"
              "  Reputation int"
-             " );"
-        );
+             " );");
     }
 
     // PostRatings
@@ -131,8 +129,7 @@ bool PocketRepository::Init(const string &table) {
              " ScoreCnt int not null,"
              " Reputation int not null,"
              " primary key (PostTxid, Block)"
-             ");"
-        );
+             ");");
     }
 
     // Scores
@@ -144,8 +141,7 @@ bool PocketRepository::Init(const string &table) {
              " PostTxid text not null,"
              " Address text not null,"
              " Value int not null"
-             ");"
-        );
+             ");");
     }
 
     // Subscribes
@@ -158,8 +154,7 @@ bool PocketRepository::Init(const string &table) {
              " Address_to text not null,"
              " Private int not null,"
              " Unsubscribe int not null"
-             ");"
-        );
+             ");");
     }
 
     // Blockings
@@ -172,8 +167,7 @@ bool PocketRepository::Init(const string &table) {
              " Address_to text not null,"
              " Unblocking int not null"
              " AddressReputation int not null"
-             ");"
-        );
+             ");");
     }
 
     // Complains
@@ -185,8 +179,7 @@ bool PocketRepository::Init(const string &table) {
              " Posttxid text not null,"
              " Address text not null,"
              " Reason int not null"
-             ");"
-        );
+             ");");
     }
 
     // UTXO
@@ -200,8 +193,7 @@ bool PocketRepository::Init(const string &table) {
              " Amount int not null,"
              " SpentBlock int,"
              " primary key (Txid, Txout)"
-             ");"
-        );
+             ");");
     }
 
     // Addresses
@@ -211,8 +203,7 @@ bool PocketRepository::Init(const string &table) {
              " Txid text not null,"
              " Block text not null,"
              " Time int not null"
-             ");"
-        );
+             ");");
     }
 
     // Comment
@@ -230,8 +221,7 @@ bool PocketRepository::Init(const string &table) {
              " ScoreUp int"
              " ScoreDown int"
              " Reputation int"
-             ");"
-        );
+             ");");
     }
 
     // CommentRatings
@@ -243,8 +233,7 @@ bool PocketRepository::Init(const string &table) {
              " ScoreDown int not null,"
              " Reputation int not null,"
              " primary key (CommentTxid, Block)"
-             ");"
-        );
+             ");");
     }
 
     // CommentScores
@@ -256,8 +245,7 @@ bool PocketRepository::Init(const string &table) {
              " CommentTxid text not null,"
              " Address text not null,"
              " Value int not null"
-             ");"
-        );
+             ");");
     }
 
     return true;
@@ -318,8 +306,40 @@ bool PocketRepository::Init(const string &table) {
 ////    );
 ////}
 
-bool PocketRepository::Add(PocketModel* itm) {
-    return exec(itm->SqlInsert());
+bool PocketRepository::Add(PocketModel* itm)
+{
+    //return exec(itm->SqlInsert());
+}
+
+
+PocketModel* PocketRepository::GetCachedTransaction(uint256 hash)
+{
+    LOCK(cs);
+    if (pocketDataCache.find(hash) != pocketDataCache.end())
+        return pocketDataCache[hash];
+
+    return nullptr;
+}
+
+void PocketRepository::AddCachedTransaction(PocketModel* itm)
+{
+    LOCK(cs);
+    if (pocketDataCache.find(itm->TxId()) != pocketDataCache.end())
+        pocketDataCache.emplace(itm->TxId(), itm);
+}
+
+void PocketRepository::AddCachedTransactions(vector<PocketModel*> itms)
+{
+    for (auto it : itms) {
+        AddCachedTransaction(it);
+    }
+}
+
+void PocketRepository::RemoveCachedTransaction(uint256 hash)
+{
+    LOCK(cs);
+    if (pocketDataCache.find(hash) != pocketDataCache.end())
+        pocketDataCache.erase(hash);
 }
 
 

@@ -109,12 +109,5 @@ public:
 };
 //-----------------------------------------------------
 extern std::unique_ptr<PocketDB> g_pocketdb;
-
-/*
-    Temp dictionary for PocketNET data, received by another nodes
-    Key - block hash
-    Value - JSON string (UniValue)
-*/
-extern std::map<uint256, std::string> POCKETNET_DATA;
 //-----------------------------------------------------
 #endif // POCKETDB_H

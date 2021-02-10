@@ -5,12 +5,13 @@
 #ifndef SRC_POCKETMODELS_H
 #define SRC_POCKETMODELS_H
 
-#include <string>
 #include <regex>
+#include <string>
 
 using namespace std;
 
-static string sql(const string &sql) {
+static string sql(const string& sql)
+{
     return regex_replace(sql, regex("'"), "''");
 }
 
@@ -25,16 +26,17 @@ enum MODELTYPE {
     BLOCKING,
 };
 
-struct PocketModel
-{
+struct PocketModel {
+    string Txid;
     virtual MODELTYPE ModelType() = 0;
+
+    uint256 TxId() const { return uint256S(Txid); }
 };
 
 
 struct User : virtual PocketModel {
     string Address;
     int Id;
-    string Txid;
     int Block;
     int64_t Time;
     string Name;
@@ -50,13 +52,13 @@ struct User : virtual PocketModel {
     string Referrer;
     // int Reputation;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::USER;
     }
 };
 
 struct Post : virtual PocketModel {
-    string Txid;
     string TxidEdit;
     string TxidRepost;
     int Block;
@@ -74,48 +76,48 @@ struct Post : virtual PocketModel {
     int ScoreCnt;
     int Reputation;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::POST;
     }
 
-//    string SqlInsert() override {
-//        return tfm::format(
-//            "insert into Posts ("
-//            " Txid,"
-//            " TxidEdit,"
-//            " TxidRepost,"
-//            " Block,"
-//            " Time,"
-//            " Address,"
-//            " Type,"
-//            " Lang,"
-//            " Caption,"
-//            " Message,"
-//            " Tags,"
-//            " Url,"
-//            " Settings"
-//            ") values ('%s',%d,'%s',%d,%ld,'%s',%d,%d,%ld,'%s','%s','%s','%s','%s','%s','%s');",
-//            sql(Txid), sql(TxidEdit), sql(TxidRepost), Block, Time, sql(Address), Type, sql(Lang),
-//            sql(Caption), sql(Message), sql(Tags), sql(Url), sql(Settings)
-//        );
-//    };
+    //    string SqlInsert() override {
+    //        return tfm::format(
+    //            "insert into Posts ("
+    //            " Txid,"
+    //            " TxidEdit,"
+    //            " TxidRepost,"
+    //            " Block,"
+    //            " Time,"
+    //            " Address,"
+    //            " Type,"
+    //            " Lang,"
+    //            " Caption,"
+    //            " Message,"
+    //            " Tags,"
+    //            " Url,"
+    //            " Settings"
+    //            ") values ('%s',%d,'%s',%d,%ld,'%s',%d,%d,%ld,'%s','%s','%s','%s','%s','%s','%s');",
+    //            sql(Txid), sql(TxidEdit), sql(TxidRepost), Block, Time, sql(Address), Type, sql(Lang),
+    //            sql(Caption), sql(Message), sql(Tags), sql(Url), sql(Settings)
+    //        );
+    //    };
 };
 
 struct PostScore : virtual PocketModel {
-    string Txid;
     int Block;
     int Time;
     string PostTxid;
     string Address;
     int Value;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::POSTSCORE;
     }
 };
 
 struct Subscribe : virtual PocketModel {
-    string Txid;
     int Block;
     int Time;
     string Address;
@@ -123,13 +125,13 @@ struct Subscribe : virtual PocketModel {
     int Private;
     int Unsubscribe;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::SUBSCRIBE;
     }
 };
 
 struct Blocking : virtual PocketModel {
-    string Txid;
     int Block;
     int Time;
     string Address;
@@ -137,26 +139,26 @@ struct Blocking : virtual PocketModel {
     int Unblocking;
     int AddressReputation;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::BLOCKING;
     }
 };
 
 struct Complain : virtual PocketModel {
-    string Txid;
     int Block;
     int Time;
     string PostTxid;
     string Address;
     int Reason;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::COMPLAIN;
     }
 };
 
 struct Comment : virtual PocketModel {
-    string Txid;
     string TxidEdit;
     string PostTxid;
     string Address;
@@ -169,20 +171,21 @@ struct Comment : virtual PocketModel {
     int ScoreDown;
     int Reputation;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::COMMENT;
     }
 };
 
 struct CommentScore : virtual PocketModel {
-    string Txid;
     int Block;
     int Time;
     string CommentTxid;
     string Address;
     int Value;
 
-    MODELTYPE ModelType() override {
+    MODELTYPE ModelType() override
+    {
         return MODELTYPE::COMMENTSCORE;
     }
 };
@@ -198,13 +201,6 @@ struct Utxo {
     string Address;
     int64_t Amount;
     int SpentBlock;
-};
-
-struct Mempool {
-    string Txid;
-    string TxidSource;
-    string Model;
-    string Data;
 };
 
 struct Service {
@@ -247,19 +243,43 @@ struct Checkpoint {
     string Checkpoint;
     string Payload;
 
-//    string SqlInsert() override {
-//        return tfm::format(
-//            " insert into Benchmark ("
-//            "  Begin,"
-//            "  End,"
-//            "  Checkpoint,"
-//            "  Payload"
-//            " ) values (%lld,%lld,'%s','%s');",
-//            Begin, End, sql(Checkpoint), sql(Payload)
-//        );
-//    }
+    //    string SqlInsert() override {
+    //        return tfm::format(
+    //            " insert into Benchmark ("
+    //            "  Begin,"
+    //            "  End,"
+    //            "  Checkpoint,"
+    //            "  Payload"
+    //            " ) values (%lld,%lld,'%s','%s');",
+    //            Begin, End, sql(Checkpoint), sql(Payload)
+    //        );
+    //    }
 };
 
+
+class PocketTransactionData
+{
+public:
+    static bool Deserialize(const string& data, PocketModel* model)
+    {
+        // TODO (brangr): @@@
+
+        struct User record;
+        model = &record;
+        return true;
+    }
+
+    static bool DeserializeBlock(const string& data, vector<PocketModel*>& models)
+    {
+        return true;
+    }
+
+    static bool Serialize(const string& data, string& model)
+    {
+        // TODO (brangr): @@@
+        return true;
+    }
+};
 
 
 #endif //SRC_POCKETMODELS_H

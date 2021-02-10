@@ -575,7 +575,7 @@ POCKETCOIN_CORE_H = \
     antibot/antibot.h \
     index/addrindex.h \
     websocket/ws.h \
-    primitives/rtransaction.h \
+    primitives/pockettransaction.h \
     html.h \
     pocketdb/pocketrepository.h \
     pocketdb/pocketnet.h \
@@ -644,7 +644,7 @@ libpocketcoin_server_a_SOURCES = \
     index/addrindex.cpp \
     websocket/ws.cpp \
     pocketdb/pocketrepository.cpp \
-    primitives/rtransaction.cpp \
+    primitives/pockettransaction.cpp \
     html.cpp \
     pocketdb/pocketnet.cpp \
     pocketdb/benchmark.cpp \

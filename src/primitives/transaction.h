@@ -315,9 +315,6 @@ public:
     const uint32_t nTime;
     const uint32_t nLockTime;
 
-    // Store social data (Post, Like, Comment, etc)
-    PocketModel* PocketData;
-
 private:
     /** Memory only. */
     const uint256 hash;
@@ -404,8 +401,6 @@ struct CMutableTransaction
     int32_t nVersion;
 	uint32_t nTime;
     uint32_t nLockTime;
-
-    PocketModel* PocketData;
 
     CMutableTransaction();
     explicit CMutableTransaction(const CTransaction& tx);

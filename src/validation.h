@@ -32,7 +32,7 @@
 #include <vector>
 #include <atomic>
 
-#include <primitives/rtransaction.h>
+#include <primitives/pockettransaction.h>
 
 #include <websocket/ws.h>
 extern std::map<std::string, WSUser> WSConnections;

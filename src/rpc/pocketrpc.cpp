@@ -31,9 +31,9 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
         }
     }
 }
-static UniValue _sendrawtransaction(CTransactionRef& tx)
+static UniValue sendrawtransaction(PocketTransaction& rtx)
 {
-    const uint256& hashTx = tx->GetHash();
+    const uint256& hashTx = rtx->GetHash();
 
     std::promise<void> promise;
     CAmount nMaxRawTxFee = maxTxFee;
@@ -42,7 +42,7 @@ static UniValue _sendrawtransaction(CTransactionRef& tx)
         LOCK(cs_main);
         CCoinsViewCache& view = *pcoinsTip;
         bool fHaveChain = false;
-        for (size_t o = 0; !fHaveChain && o < tx->vout.size(); o++) {
+        for (size_t o = 0; !fHaveChain && o < rtx->vout.size(); o++) {
             const Coin& existingCoin = view.AccessCoin(COutPoint(hashTx, o));
             fHaveChain = !existingCoin.IsSpent();
         }
@@ -51,7 +51,7 @@ static UniValue _sendrawtransaction(CTransactionRef& tx)
             // push to local node and sync with wallets
             CValidationState state;
             bool fMissingInputs;
-            if (!AcceptToMemoryPool(mempool, state, tx, &fMissingInputs, nullptr /* plTxnReplaced */, false /* bypass_limits */, nMaxRawTxFee)) {
+            if (!AcceptToMemoryPool(mempool, state, rtx, &fMissingInputs, nullptr /* plTxnReplaced */, false /* bypass_limits */, nMaxRawTxFee)) {
                 if (state.IsInvalid()) {
                     throw JSONRPCError(RPC_TRANSACTION_REJECTED, FormatStateMessage(state));
                 } else {
@@ -383,7 +383,8 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid address");
     }
 
-    std::string txid = mutTx.GetHash().GetHex();
+    PocketTransaction rtx(mutTx);
+    std::string txid = rtx->GetHash().GetHex();
 
     // Antibot check this transaction
     std::string mesType = request.params[2].get_str();
@@ -391,7 +392,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
 
     if (mesType == "share") {
         struct Post record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         std::string postlang = "en";
         if (request.params[1].exists("l"))
@@ -444,7 +445,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
 
     } else if (mesType == "upvoteShare") {
         struct PostScore record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Block = -1;
@@ -458,7 +459,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
 
     } else if (mesType == "subscribe" || mesType == "subscribePrivate") {
         struct Subscribe record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Block = -1;
@@ -480,7 +481,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         //        if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction");
         //----------------------------
         struct Subscribe record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Block = -1;
@@ -493,7 +494,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
 
     } else if (mesType == "userInfo") {
         struct User record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Block = -1;
@@ -522,7 +523,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
 
     } else if (mesType == "complainShare") {
         struct Complain record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Block = -1;
@@ -536,7 +537,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
 
     } else if (mesType == "blocking") {
         struct Blocking record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Block = -1;
@@ -557,7 +558,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         //        if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction");
         //----------------------------
         struct Blocking record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Block = -1;
@@ -576,7 +577,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         if (!valid) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameters");
 
         struct Comment record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         std::string txEdit = txid;
         if (request.params[1].exists("id")) txEdit = request.params[1]["id"].get_str();
@@ -601,7 +602,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         if (!valid) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid parameters");
 
         struct CommentScore record;
-        mutTx.PocketData = &record;
+        rtx.PocketData = &record;
 
         record.Txid = txid;
         record.Address = address;
@@ -617,8 +618,6 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
     } else {
         throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid transaction type");
     }
-
-    CTransactionRef tx(MakeTransactionRef(std::move(mutTx)));
     //-------------------------------------------------
     // Check transaction with antibot
     // TODO (brangr): @@@
@@ -629,7 +628,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
     //    }
 
     // Antibot checked -> create transaction in blockchain
-    UniValue rt = _sendrawtransaction(tx);
+    UniValue rt = sendrawtransaction(rtx);
     //-------------------------------------------------
     return rt;
 }

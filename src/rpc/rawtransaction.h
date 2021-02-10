@@ -17,7 +17,7 @@
 #include <net.h>
 #include <policy/policy.h>
 #include <policy/rbf.h>
-#include <primitives/rtransaction.h>
+#include <primitives/pockettransaction.h>
 #include <primitives/transaction.h>
 #include <rpc/server.h>
 #include <script/script.h>
