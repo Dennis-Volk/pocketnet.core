@@ -1,7 +1,6 @@
 #pragma once
 
 #include "transaction.h"
-#include "pocketdb/pocketdb.h"
 
 class PocketTransaction : public CTransactionRef {
 public:

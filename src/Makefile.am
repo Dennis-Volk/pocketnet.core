@@ -576,10 +576,10 @@ POCKETCOIN_CORE_H = \
     index/addrindex.h \
     websocket/ws.h \
     primitives/pockettransaction.h \
+    primitives/pocketblock.h \
     html.h \
     pocketdb/pocketrepository.h \
-    pocketdb/pocketnet.h \
-    pocketdb/benchmark.h
+    pocketdb/pocketnet.h
 
 obj/build.h: FORCE
 	@$(MKDIR_P) $(builddir)/obj
@@ -645,9 +645,9 @@ libpocketcoin_server_a_SOURCES = \
     websocket/ws.cpp \
     pocketdb/pocketrepository.cpp \
     primitives/pockettransaction.cpp \
+    primitives/pocketblock.cpp \
     html.cpp \
     pocketdb/pocketnet.cpp \
-    pocketdb/benchmark.cpp \
     $(POCKETCOIN_CORE_H)
 
 if !ENABLE_WALLET

@@ -214,7 +214,7 @@ public:
         Check all transactions in block
         Include this transactions as parents
     */
-    bool CheckBlock(BlockVTX& blockVtx, int height);
+    bool CheckBlock(PocketBlock& block, int height);
     /*
 		Return array of user states.
 		Contains info about spent and unspent posts and scores. Also current reputation value

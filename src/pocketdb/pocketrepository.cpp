@@ -22,7 +22,6 @@ PocketRepository::~PocketRepository()
     sqlite3_close(db);
 }
 
-//-----------------------------------------------------
 bool PocketRepository::exec(const string& sql)
 {
     char* zErrMsg = nullptr;
@@ -34,6 +33,9 @@ bool PocketRepository::exec(const string& sql)
 
     return true;
 }
+
+
+
 //-----------------------------------------------------
 
 bool PocketRepository::Init(const string& table)
@@ -311,36 +313,79 @@ bool PocketRepository::Add(PocketModel* itm)
     //return exec(itm->SqlInsert());
 }
 
-
-PocketModel* PocketRepository::GetCachedTransaction(uint256 hash)
+bool PocketRepository::Add(PocketBlock& pocketBlock)
 {
-    LOCK(cs);
-    if (pocketDataCache.find(hash) != pocketDataCache.end())
-        return pocketDataCache[hash];
-
-    return nullptr;
+    // TODO (brangr): @@@ save models in DB
+    return false;
 }
 
-void PocketRepository::AddCachedTransaction(PocketModel* itm)
+// ----------------------------------------------------
+// Transaction data cache
+
+bool PocketRepository::GetCachedTransaction(const CTransaction& tx, PocketModel* itm)
+{
+    if (!g_addrindex->IsPocketnetTransaction(tx))
+        return true;
+
+    LOCK(cs);
+    if (pocketDataCache.find(tx.GetHash()) != pocketDataCache.end()) {
+        itm = pocketDataCache[tx.GetHash()];
+        return true;
+    }
+
+    return false;
+}
+
+bool PocketRepository::GetCachedTransactions(const CBlock& block, vector<PocketModel*>& itms) {
+    for (const auto& tx : block.vtx) {
+        PocketModel* itm;
+        if (!GetCachedTransaction(*tx, itm))
+            return false;
+
+        if (itm)
+            itms.push_back(itm);
+    }
+
+    return true;
+}
+
+bool PocketRepository::AddCachedTransaction(PocketModel* itm)
 {
     LOCK(cs);
     if (pocketDataCache.find(itm->TxId()) != pocketDataCache.end())
         pocketDataCache.emplace(itm->TxId(), itm);
+
+    return true;
 }
 
-void PocketRepository::AddCachedTransactions(vector<PocketModel*> itms)
+bool PocketRepository::AddCachedTransactions(vector<PocketModel*>& itms)
 {
     for (auto it : itms) {
-        AddCachedTransaction(it);
+        if (!AddCachedTransaction(it))
+            return false;
     }
+
+    return true;
 }
 
-void PocketRepository::RemoveCachedTransaction(uint256 hash)
+bool PocketRepository::RemoveCachedTransaction(const CTransaction& tx)
 {
     LOCK(cs);
-    if (pocketDataCache.find(hash) != pocketDataCache.end())
-        pocketDataCache.erase(hash);
+    if (pocketDataCache.find(tx.GetHash()) != pocketDataCache.end())
+        pocketDataCache.erase(tx.GetHash());
+
+    return true;
+}
+
+bool PocketRepository::RemoveCachedTransactions(const CBlock& block)
+{
+    for (const auto& tx : block.vtx) {
+        if (!RemoveCachedTransaction(*tx))
+            return false;
+    }
+
+    return true;
 }
 
 
-//-----------------------------------------------------
+// ----------------------------------------------------

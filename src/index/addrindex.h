@@ -144,7 +144,7 @@ public:
     /*
 		Indexing block transactions.
 	*/
-    bool IndexBlock(const CBlock& block, CBlockIndex* pindex);
+    bool IndexBlock(const CBlock& block, PocketBlock& pocketBlock, CBlockIndex* pindex);
     /*
 		Fix tables data.
 		New current best block is `bestBlock`
@@ -189,8 +189,7 @@ public:
     /*
         Write transaction for block received from another node
     */
-    bool SetBlockRIData(std::string& data, int height);
-    bool SetBlockData(const CBlock& block, int height);
+    bool SetBlockData(const CBlock& block, PocketBlock& pocketBlock, int height);
     /*
         Get RI data for transaction for send to another node.
         Check transaction is PocketNet type transaction

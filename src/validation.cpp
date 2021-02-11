@@ -183,7 +183,7 @@ public:
 
     // Block (dis)connection on a given view:
     DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* pindex, CCoinsViewCache& view);
-    bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, const CChainParams& chainparams, bool fJustCheck = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    bool ConnectBlock(const CBlock& block, PocketBlock& pocketBlock, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, const CChainParams& chainparams, bool fJustCheck = false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Block disconnection on our pcoinsTip:
     bool DisconnectTip(CValidationState& state, const CChainParams& chainparams, DisconnectedBlockTransactions* disconnectpool);
@@ -1839,10 +1839,8 @@ static int64_t nBlocksTotal = 0;
 /** Apply the effects of this block (with given index) on the UTXO set represented by coins.
  *  Validity checks that depend on the UTXO set are also done; ConnectBlock()
  *  can fail if those validity checks fail (among other reasons). */
-bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, const CChainParams& chainparams, bool fJustCheck)
+bool CChainState::ConnectBlock(const CBlock& block, PocketBlock& pocketBlock, CValidationState& state, CBlockIndex* pindex, CCoinsViewCache& view, const CChainParams& chainparams, bool fJustCheck)
 {
-    auto benchBegin = g_benchmark->Begin();
-
     AssertLockHeld(cs_main);
     assert(pindex);
     assert(*pindex->phashBlock == block.GetHash());
@@ -2198,42 +2196,22 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
 
     //----------------------------------------------------------------------------------
-    uint256 blockhash = block.GetHash();
-    std::vector<auto> pocketData;
+    // Check pocket data with Antibot
+    if (!IsCheckpointBlock(pindex->nHeight, block.GetHash().GetHex()))
+        if (!g_antibot->CheckBlock(pocketBlock, pindex->nHeight))
+            return state.Invalid(false, REJECT_INVALID, "bad-antibot-checking", strprintf("Block check with the AntiBot failed (%s)", block.GetHash().GetHex()));
 
-    // Get pocket data from memory cache
-    if (POCKETNET_DATA.find(blockhash) != POCKETNET_DATA.end()) {
-        std::string pocketDataSource = POCKETNET_DATA[blockhash];
-        POCKETNET_DATA.erase(blockhash);
+    // Write pocket data to DB
+    pocketBlock.SetBlockHeight(pindex->nHeight);
+    if (!g_pocket_repository->Add(pocketBlock)) {
+        LogPrintf("--- Failed save pocket data (%s)\n", block.GetHash().GetHex());
+        return false;
     }
 
-    // Check reindexer data exists and Antibot checks
-    // TODO (brangr): FOR SQL WRITING LOGIC
-    //    if (!CheckBlockAdditional(pindex, block, state)) {
-    //        return false;
-    //    }
-
-    // Try write reindexer data
-    // Data can received by another node or this node created new block
-    // and data in mempool
-    {
-        // Write received Pocket data to Sqlite DB
-        if (!g_addrindex->SetBlockData(pocketData, pindex->nHeight)) {
-            LogPrintf("--- Failed restore received data (%s) (AddrIndex::SetBlockRIData)\n", blockhash.GetHex());
-            return false;
-        }
-
-        // Get data from RIMempool and write to general RI tables
-        if (!g_addrindex->CommitRIMempool(block, pindex->nHeight)) {
-            LogPrintf("--- Failed restore RI Mempool block (%s) (AddrIndex::CommitRIMempool)\n", blockhash.GetHex());
-            return false;
-        }
-
-        // Indexing new block
-        if (!g_addrindex->IndexBlock(block, pindex)) {
-            LogPrintf("--- Failed indexing block (%s)\n", blockhash.GetHex());
-            return false;
-        }
+    // Indexing new block
+    if (!g_addrindex->IndexBlock(block, pocketBlock, pindex)) {
+        LogPrintf("--- Failed indexing block (%s)\n", block.GetHash().GetHex());
+        return false;
     }
     //-----------------------------------------------------
     int64_t nTime4 = GetTimeMicros();
@@ -2262,11 +2240,6 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     int64_t nTime6 = GetTimeMicros();
     nTimeCallbacks += nTime6 - nTime5;
     LogPrint(BCLog::BENCH, "    - Callbacks: %.2fms [%.2fs (%.2fms/blk)]\n", MILLI * (nTime6 - nTime5), nTimeCallbacks * MICRO, nTimeCallbacks * MILLI / nBlocksTotal);
-
-    UniValue payload(UniValue::VOBJ);
-    payload.pushKV("block", pindex->nHeight);
-    payload.pushKV("hash", pindex->GetBlockHash().GetHex());
-    g_benchmark->End(benchBegin, "fnc_CChainState::ConnectBlock", payload.write());
 
     return true;
 }
@@ -2628,8 +2601,6 @@ public:
  */
 bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexNew, const std::shared_ptr<const CBlock>& pblock, ConnectTrace& connectTrace, DisconnectedBlockTransactions& disconnectpool)
 {
-    auto benchBegin = g_benchmark->Begin();
-
     assert(pindexNew->pprev == chainActive.Tip());
     // Read block from disk.
     int64_t nTime1 = GetTimeMicros();
@@ -2643,6 +2614,13 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
         pthisBlock = pblock;
     }
     const CBlock& blockConnecting = *pthisBlock;
+
+    // Get pocket data from memory cache
+    std::vector<PocketModel*> pocketData;
+    if (!g_pocket_repository->GetCachedTransactions(blockConnecting, pocketData)) {
+        return AbortNode(state, "Failed to read pocket data");
+    }
+
     // Apply the block atomically to the chain state.
     int64_t nTime2 = GetTimeMicros();
     nTimeReadFromDisk += nTime2 - nTime1;
@@ -2650,7 +2628,8 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     LogPrint(BCLog::BENCH, "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * MILLI, nTimeReadFromDisk * MICRO);
     {
         CCoinsViewCache view(pcoinsTip.get());
-        bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, chainparams);
+        PocketBlock pocketBlock(pocketData);
+        bool rv = ConnectBlock(blockConnecting, pocketBlock, state, pindexNew, view, chainparams);
         GetMainSignals().BlockChecked(blockConnecting, state);
         if (!rv) {
             if (state.IsInvalid()) {
@@ -3788,6 +3767,8 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
     return true;
 }
 
+// TODO (brangr): @@@ remove
+/*
 bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string ri_table, reindexer::Item& itm)
 {
     std::string txid = tx->GetHash().GetHex();
@@ -3850,7 +3831,9 @@ bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string
     LogPrintf("700004: Transaction RI data Not Found (%s)\n", txid);
     return false;
 }
+*/
 
+/*
 bool CheckBlockAdditional(CBlockIndex* pindex, const CBlock& block, CValidationState& state)
 {
     auto benchBegin = g_benchmark->Begin();
@@ -3894,13 +3877,9 @@ bool CheckBlockAdditional(CBlockIndex* pindex, const CBlock& block, CValidationS
             return state.Invalid(false, REJECT_INVALID, "bad-antibot-checking", strprintf("Block check with the AntiBot failed (%s)", blockhash.GetHex()));
     }
 
-    UniValue payload(UniValue::VOBJ);
-    payload.pushKV("block", pindex->nHeight);
-    payload.pushKV("hash", pindex->GetBlockHash().GetHex());
-    g_benchmark->End(benchBegin, "fnc_CheckBlockAdditional", payload.write());
-
     return true;
 }
+*/
 
 bool CheckBlockSignature(const CBlock& block)
 {

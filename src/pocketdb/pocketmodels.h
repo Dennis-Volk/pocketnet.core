@@ -28,6 +28,8 @@ enum MODELTYPE {
 
 struct PocketModel {
     string Txid;
+    int Block;
+
     virtual MODELTYPE ModelType() = 0;
 
     uint256 TxId() const { return uint256S(Txid); }
@@ -37,7 +39,6 @@ struct PocketModel {
 struct User : virtual PocketModel {
     string Address;
     int Id;
-    int Block;
     int64_t Time;
     string Name;
     int Birthday;
@@ -61,7 +62,6 @@ struct User : virtual PocketModel {
 struct Post : virtual PocketModel {
     string TxidEdit;
     string TxidRepost;
-    int Block;
     int64_t Time;
     string Address;
     int Type;
@@ -105,7 +105,6 @@ struct Post : virtual PocketModel {
 };
 
 struct PostScore : virtual PocketModel {
-    int Block;
     int Time;
     string PostTxid;
     string Address;
@@ -118,7 +117,6 @@ struct PostScore : virtual PocketModel {
 };
 
 struct Subscribe : virtual PocketModel {
-    int Block;
     int Time;
     string Address;
     string AddressTo;
@@ -132,7 +130,6 @@ struct Subscribe : virtual PocketModel {
 };
 
 struct Blocking : virtual PocketModel {
-    int Block;
     int Time;
     string Address;
     string AddressTo;
@@ -146,7 +143,6 @@ struct Blocking : virtual PocketModel {
 };
 
 struct Complain : virtual PocketModel {
-    int Block;
     int Time;
     string PostTxid;
     string Address;
@@ -163,7 +159,6 @@ struct Comment : virtual PocketModel {
     string PostTxid;
     string Address;
     int Time;
-    int Block;
     string Msg;
     string ParentTxid;
     string AnswerTxid;
@@ -178,7 +173,6 @@ struct Comment : virtual PocketModel {
 };
 
 struct CommentScore : virtual PocketModel {
-    int Block;
     int Time;
     string CommentTxid;
     string Address;

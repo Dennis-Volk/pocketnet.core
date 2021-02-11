@@ -1303,7 +1303,7 @@ bool AntiBot::CheckInputs(CTransactionRef& tx) {
     return true;
 }
 
-bool AntiBot::CheckBlock(BlockVTX& blockVtx, int height) {
+bool AntiBot::CheckBlock(PocketBlock& block, int height) {
     for (auto& t : blockVtx.Data) {
         for (auto& mtx : t.second) {
             ANTIBOTRESULT resultCode = ANTIBOTRESULT::Success;

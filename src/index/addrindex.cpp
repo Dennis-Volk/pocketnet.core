@@ -348,7 +348,7 @@ bool AddrIndex::computeCommentRatings(CBlockIndex* pindex, std::map<std::string,
 //-----------------------------------------------------
 // PUBLIC
 //-----------------------------------------------------
-bool AddrIndex::IndexBlock(const CBlock& block, CBlockIndex* pindex)
+bool AddrIndex::IndexBlock(const CBlock& block, PocketBlock& pocketBlock, CBlockIndex* pindex)
 {
     // User reputations map for this block
     // <address, rep>
@@ -1100,7 +1100,7 @@ bool AddrIndex::SetBlockRIData(std::string& data, int height)
     return true;
 }
 
-bool AddrIndex::SetBlockData(const CBlock& block, int height)
+bool AddrIndex::SetBlockData(const CBlock& block, PocketBlock& pocketBlock, int height)
 {
     // TODO (brangr): @@@ write to sql
 }
