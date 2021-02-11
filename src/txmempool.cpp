@@ -427,9 +427,7 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
     mapLinks.erase(it);
     mapTx.erase(it);
 
-    // TODO (brangr): add IsPocketTX
-    // LogPrintf("--- CTxMemPool::removeUnchecked (%d): %s\n", (int)reason, hash.GetHex());
-    g_addrindex->ClearMempool(hash.GetHex());
+    g_pocket_repository->RemoveCachedTransaction(hash);
 
     nTransactionsUpdated++;
     if (minerPolicyEstimator) {minerPolicyEstimator->removeTx(hash, false);}

@@ -42,6 +42,7 @@ public:
     bool GetCachedTransactions(const CBlock& block, vector<PocketModel*>& itms);
     bool AddCachedTransaction(PocketModel* itm);
     bool AddCachedTransactions(vector<PocketModel*>& itms);
+    bool RemoveCachedTransaction(uint256 hash);
     bool RemoveCachedTransaction(const CTransaction& tx);
     bool RemoveCachedTransactions(const CBlock& block);
 };

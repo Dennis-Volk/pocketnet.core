@@ -52,7 +52,6 @@
 
 #include "antibot/antibot.h"
 #include "index/addrindex.h"
-#include "pocketdb/benchmark.h"
 
 using WsServer = SimpleWeb::SocketServer<SimpleWeb::WS>;
 std::map<std::string, WSUser> WSConnections;
@@ -954,24 +953,8 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
         // - the transaction is not dependent on any other transactions in the mempool
         bool validForFeeEstimation = !fReplacementTransaction && !bypass_limits && IsCurrentForFeeEstimation() && pool.HasNoInputsOf(tx);
 
-        // Write reindexer part to mempool
-        std::string table;
-        if (g_addrindex->GetPocketnetTXType(rtx, table)) {
-            if (!rtx.pTransaction || rtx.pTable != table) {
-                return state.DoS(0, false, REJECT_INTERNAL, "not found reindexer data");
-            } else {
-                std::string _txid = rtx.pTransaction["txid"].As<string>();
-
-                reindexer::Item memItm = g_pocketdb->DB()->NewItem("Mempool");
-                memItm["txid"] = hash.GetHex();
-                memItm["txid_source"] = hash.GetHex() == _txid ? "" : _txid;
-                memItm["table"] = rtx.pTable;
-                memItm["data"] = EncodeBase64(rtx.pTransaction.GetJSON().ToString());
-                if (!g_addrindex->WriteMemRTransaction(memItm)) {
-                    return state.DoS(0, false, REJECT_INTERNAL, "error write reindexer data");
-                }
-            }
-        }
+        // Save pocket data in cache
+        g_pocket_repository->AddCachedTransaction(rtx.PocketData);
 
         // Store transaction in memory
         pool.addUnchecked(entry, setAncestors, validForFeeEstimation);
@@ -980,8 +963,7 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
         if (!bypass_limits) {
             LimitMempoolSize(pool, gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, gArgs.GetArg("-mempoolexpiry", DEFAULT_MEMPOOL_EXPIRY) * 60 * 60);
             if (!pool.exists(hash)) {
-                LogPrintf("--- validation:986: %s\n", hash.GetHex());
-                g_addrindex->ClearMempool(hash.GetHex());
+                g_pocket_repository->RemoveCachedTransaction(hash);
                 return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool full");
             }
         }
@@ -2686,11 +2668,6 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
 
     LogPrintf("+++ Block connected to chain: %d BH:%s\n", pindexNew->nHeight, pindexNew->GetBlockHash().GetHex());
 
-    UniValue payload(UniValue::VOBJ);
-    payload.pushKV("block", pindexNew->nHeight);
-    payload.pushKV("hash", pindexNew->GetBlockHash().GetHex());
-    g_benchmark->End(benchBegin, "fnc_CChainState::ConnectTip", payload.write());
-
     return true;
 }
 
@@ -2698,8 +2675,6 @@ typedef std::map<std::string, std::string> custom_fields;
 
 void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
 {
-    auto benchBegin = g_benchmark->Begin();
-
     // <address, [messages]>
     std::map<std::string, std::vector<UniValue>> messages;
     uint256 _block_hash = block.GetHash();
@@ -3034,8 +3009,6 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
             connWS.second.Block = blockIndex->nHeight;
         }
     }
-
-    g_benchmark->End(benchBegin, "fnc_CChainState::NotifyWSClients", "{}");
 }
 
 void CChainState::PrepareWSMessage(std::map<std::string, std::vector<UniValue>>& messages, std::string msg_type, std::string addrTo, std::string txid, int64_t txtime, custom_fields cFields)
@@ -3737,13 +3710,6 @@ bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::P
     if (fCheckSig && !CheckBlockSignature(block)) {
         //return error("CheckBlock() : bad proof-of-stake block signature");
         return false;
-    }
-
-    // Read and parse received block data
-    UniValue _txs_src(UniValue::VOBJ);
-    if (POCKETNET_DATA.find(block.GetHash()) != POCKETNET_DATA.end()) {
-        std::string _pocket_data = POCKETNET_DATA[block.GetHash()];
-        _txs_src.read(_pocket_data);
     }
 
     // Check transactions
@@ -5623,23 +5589,6 @@ bool LoadMempool()
 
         for (const auto& i : mapDeltas) {
             mempool.PrioritiseTransaction(i.first, i.second);
-        }
-
-        // Delete all, if not exists in general mempool
-        {
-            reindexer::QueryResults memRes;
-            if (g_pocketdb->Select(reindexer::Query("Mempool"), memRes).ok()) {
-                for (auto& m : memRes) {
-                    reindexer::Item memItm = m.GetItem();
-                    uint256 txid;
-                    std::string txidStr = memItm["txid"].As<string>();
-                    txid.SetHex(txidStr);
-
-                    if (!mempool.exists(txid)) {
-                        g_addrindex->ClearMempool(txidStr);
-                    }
-                }
-            }
         }
     } catch (const std::exception& e) {
         LogPrintf("Failed to deserialize mempool data on disk: %s. Continuing anyway.\n", e.what());

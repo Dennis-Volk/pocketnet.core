@@ -351,6 +351,9 @@ bool PocketRepository::GetCachedTransactions(const CBlock& block, vector<PocketM
 
 bool PocketRepository::AddCachedTransaction(PocketModel* itm)
 {
+    if (!itm)
+        return true;
+
     LOCK(cs);
     if (pocketDataCache.find(itm->TxId()) != pocketDataCache.end())
         pocketDataCache.emplace(itm->TxId(), itm);
@@ -368,13 +371,19 @@ bool PocketRepository::AddCachedTransactions(vector<PocketModel*>& itms)
     return true;
 }
 
-bool PocketRepository::RemoveCachedTransaction(const CTransaction& tx)
+
+bool PocketRepository::RemoveCachedTransaction(uint256 hash)
 {
     LOCK(cs);
-    if (pocketDataCache.find(tx.GetHash()) != pocketDataCache.end())
-        pocketDataCache.erase(tx.GetHash());
+    if (pocketDataCache.find(hash) != pocketDataCache.end())
+        pocketDataCache.erase(hash);
 
     return true;
+}
+
+bool PocketRepository::RemoveCachedTransaction(const CTransaction& tx)
+{
+    return RemoveCachedTransaction(tx.GetHash());
 }
 
 bool PocketRepository::RemoveCachedTransactions(const CBlock& block)
