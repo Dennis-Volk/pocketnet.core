@@ -2684,9 +2684,11 @@ UniValue gethierarchicalstrip(const JSONRPCRequest& request)
             "gethierarchicalstrip\n"
             "\n.\n");
 
-    int nLastBlock = 1089897;
+    //int nLastBlock = 1089897;
+    int nLastBlock = chainActive.Height();
 
-    int cntPostsForResult = 500;
+    //int cntPostsForResult = 500;
+    int cntBlocksForResult = 300;
     int cntPrevPosts = 5;
     int durationBlocksForPrevPosts = 24 * 60; // about 1 day
     double dekayRep = 0.7;
@@ -2701,8 +2703,9 @@ UniValue gethierarchicalstrip(const JSONRPCRequest& request)
     reindexer::Query query;
     reindexer::QueryResults queryResults;
 
-    query = reindexer::Query("Posts",0, cntPostsForResult)
+    query = reindexer::Query("Posts")
                 .Where("block", CondLe, nLastBlock)
+                .Where("block", CondGt, nLastBlock - cntBlocksForResult)
                 .Sort("block", true).Sort("time", true)
                 .InnerJoin("address", "address", CondEq, reindexer::Query("UsersView").Limit(1));
 
@@ -2784,7 +2787,24 @@ UniValue gethierarchicalstrip(const JSONRPCRequest& request)
         reindexer::Error errS = g_pocketdb->SelectOne(
             reindexer::Query("Posts").Where("txid", CondEq, v.second),
             postItm);
-        result.push_back(getPostData(postItm, ""));
+
+        UniValue entry(UniValue::VOBJ);
+        entry = getPostData(postItm, "");
+
+        UniValue postRaiting(UniValue::VOBJ);
+        postRaiting.pushKV("LAST5", postsRanks[v.second][LAST5]);
+        postRaiting.pushKV("LAST5R", postsRanks[v.second][LAST5R]);
+        postRaiting.pushKV("BOOST", postsRanks[v.second][BOOST]);
+        postRaiting.pushKV("UREP", postsRanks[v.second][UREP]);
+        postRaiting.pushKV("UREPR", postsRanks[v.second][UREPR]);
+        postRaiting.pushKV("DREP", postsRanks[v.second][DREP]);
+        postRaiting.pushKV("PREP", postsRanks[v.second][PREP]);
+        postRaiting.pushKV("PREPR", postsRanks[v.second][PREPR]);
+        postRaiting.pushKV("DPOST", postsRanks[v.second][DPOST]);
+        postRaiting.pushKV("POSTRF", postsRanks[v.second][POSTRF]);
+        entry.pushKV("postRaitings", postRaiting);
+
+        result.push_back(entry);
     }
 
     return result;
